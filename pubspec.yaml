@@ -1,0 +1,40 @@
+name: ruang_pribadi
+description: "A new Flutter project."
+publish_to: 'none' # Remove this line if you wish to publish to pub.dev
+
+version: 1.0.0+1
+
+environment:
+  sdk: ^3.6.0
+
+dependencies:
+  flutter:
+    sdk: flutter
+
+  cupertino_icons: ^1.0.8
+  sqflite: ^2.4.1
+  path: ^1.9.0
+  path_provider: ^2.1.5
+
+dev_dependencies:
+  flutter_test:
+    sdk: flutter
+
+  flutter_lints: ^5.0.0
+
+
+flutter:
+  uses-material-design: true
+
+  assets:
+    - assets/database/data.db
+
+  fonts:
+    - family: Roboto
+      fonts:
+        - asset: assets/fonts/roboto/roboto-regular.ttf
+        - asset: assets/fonts/roboto/roboto-italic.ttf
+
+    - family: Noto_Sans_JP
+      fonts:
+        - asset: assets/fonts/noto_sans_jp/noto-sans-jp.ttf
