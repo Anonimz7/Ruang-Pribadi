@@ -2,7 +2,7 @@ name: ruang_pribadi
 description: "A new Flutter project."
 publish_to: 'none' # Remove this line if you wish to publish to pub.dev
 
-version: 1.0.0+1
+version: 4.0.0
 
 environment:
   sdk: ^3.6.0
@@ -10,12 +10,15 @@ environment:
 dependencies:
   flutter:
     sdk: flutter
-
+  
   cupertino_icons: ^1.0.8
   sqflite: ^2.4.1
   path: ^1.9.0
+  shared_preferences: ^2.0.15
+  provider: ^6.0.0
   path_provider: ^2.1.5
-
+  intl: ^0.18.0
+  
 dev_dependencies:
   flutter_test:
     sdk: flutter
@@ -25,16 +28,29 @@ dev_dependencies:
 
 flutter:
   uses-material-design: true
-
+  # Windows struktur database
   assets:
-    - assets/database/data.db
+    - assets\database\data.db
 
   fonts:
     - family: Roboto
       fonts:
-        - asset: assets/fonts/roboto/roboto-regular.ttf
-        - asset: assets/fonts/roboto/roboto-italic.ttf
+        - asset: assets\fonts\roboto\roboto-reguler.ttf
+        - asset: assets\fonts\roboto\roboto-italic.ttf
 
     - family: Noto_Sans_JP
       fonts:
-        - asset: assets/fonts/noto_sans_jp/noto-sans-jp.ttf
+        - asset: assets\fonts\noto_sans_jp\noto-sans-jp.ttf
+# Linux Struktur database
+# assets:
+#   - assets/database/database.db
+
+# fonts:
+#   - family: Roboto
+#     fonts:
+#       - asset: assets/fonts/roboto/roboto-reguler.ttf
+#       - asset: assets/fonts/roboto/roboto-italic.ttf
+
+#   - family: Noto_Sans_JP
+#     fonts:
+#       - asset: assets/fonts/noto_sans_jp/noto-sans-jp.ttf

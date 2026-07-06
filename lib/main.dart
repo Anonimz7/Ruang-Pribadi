@@ -1,125 +1,207 @@
+// Inisialisasi library
 import 'package:flutter/material.dart';
+import 'package:provider/provider.dart';
+import 'package:shared_preferences/shared_preferences.dart';
+import 'bahasa_jepun/bahasa_jepun.dart';
+import "math_speed/math.dart";
+import 'passwrod_generator/pasgen.dart';
 
+/// Notifier untuk mode gelap
+final ValueNotifier<bool> darkModeNotifier = ValueNotifier<bool>(false);
+
+/// Fungsi untuk memuat preferensi dark mode dari SharedPreferences
+Future<bool> loadDarkMode() async {
+  final prefs = await SharedPreferences.getInstance();
+  return prefs.getBool('darkMode') ?? false;
+}
+
+/// Fungsi untuk menyimpan preferensi dark mode
+Future<void> saveDarkMode(bool value) async {
+  final prefs = await SharedPreferences.getInstance();
+  await prefs.setBool('darkMode', value);
+}
+
+// Fungsi main
 void main() {
+  WidgetsFlutterBinding.ensureInitialized();
   runApp(const MyApp());
 }
 
-class MyApp extends StatelessWidget {
+class MyApp extends StatefulWidget {
   const MyApp({super.key});
 
-  // This widget is the root of your application.
+  @override
+  _MyAppState createState() => _MyAppState();
+}
+
+class _MyAppState extends State<MyApp> {
+  late Future<bool> _darkModeFuture;
+
+  @override
+  void initState() {
+    super.initState();
+    _darkModeFuture = loadDarkMode();
+  }
+
   @override
   Widget build(BuildContext context) {
-    return MaterialApp(
-      title: 'Flutter Demo',
-      theme: ThemeData(
-        // This is the theme of your application.
-        //
-        // TRY THIS: Try running your application with "flutter run". You'll see
-        // the application has a purple toolbar. Then, without quitting the app,
-        // try changing the seedColor in the colorScheme below to Colors.green
-        // and then invoke "hot reload" (save your changes or press the "hot
-        // reload" button in a Flutter-supported IDE, or press "r" if you used
-        // the command line to start the app).
-        //
-        // Notice that the counter didn't reset back to zero; the application
-        // state is not lost during the reload. To reset the state, use hot
-        // restart instead.
-        //
-        // This works for code too, not just values: Most code changes can be
-        // tested with just a hot reload.
-        colorScheme: ColorScheme.fromSeed(seedColor: Colors.deepPurple),
-        useMaterial3: true,
-      ),
-      home: const MyHomePage(title: 'Flutter Demo Home Page'),
+    return FutureBuilder<bool>(
+      future: _darkModeFuture,
+      builder: (context, snapshot) {
+        final isDarkMode = snapshot.data ?? false;
+        darkModeNotifier.value = isDarkMode;
+
+        return MultiProvider(
+          providers: [
+            ChangeNotifierProvider(create: (_) => SettingsProvider()),
+            ChangeNotifierProvider(create: (_) => QuizProvider()),
+            ChangeNotifierProvider(create: (_) => RecordProvider()),
+          ],
+          child: ValueListenableBuilder<bool>(
+            valueListenable: darkModeNotifier,
+            builder: (context, isDarkMode, child) {
+              return MaterialApp(
+                title: 'Ruang VIP',
+                theme: ThemeData(
+                    fontFamily: 'Roboto', brightness: Brightness.light),
+                darkTheme: ThemeData(brightness: Brightness.dark),
+                themeMode: isDarkMode ? ThemeMode.dark : ThemeMode.light,
+                home: const MainPage(),
+              );
+            },
+          ),
+        );
+      },
     );
   }
 }
 
-class MyHomePage extends StatefulWidget {
-  const MyHomePage({super.key, required this.title});
-
-  // This widget is the home page of your application. It is stateful, meaning
-  // that it has a State object (defined below) that contains fields that affect
-  // how it looks.
-
-  // This class is the configuration for the state. It holds the values (in this
-  // case the title) provided by the parent (in this case the App widget) and
-  // used by the build method of the State. Fields in a Widget subclass are
-  // always marked "final".
-
-  final String title;
+class MainPage extends StatefulWidget {
+  const MainPage({super.key});
 
   @override
-  State<MyHomePage> createState() => _MyHomePageState();
+  _MainPageState createState() => _MainPageState();
 }
 
-class _MyHomePageState extends State<MyHomePage> {
-  int _counter = 0;
+/// Fungsi untuk inisialisasi halaman
+class _MainPageState extends State<MainPage> {
+  int _selectedIndex = 1; // Profil sebagai halaman default
 
-  void _incrementCounter() {
+  static const List<Widget> _pages = <Widget>[
+    PengaturanPage(), // Halaman Pengaturan 0
+    PlaceholderWidget(), // Halaman Profil 1
+    BahasaJepun(), // Halaman Belajar Bahasa Jepang 2
+    MathApp(), // Halaman Math App 3
+    PasswordGeneratorPage(), // Halaman Password Generator 4
+  ];
+
+  void _onItemTapped(int index) {
     setState(() {
-      // This call to setState tells the Flutter framework that something has
-      // changed in this State, which causes it to rerun the build method below
-      // so that the display can reflect the updated values. If we changed
-      // _counter without calling setState(), then the build method would not be
-      // called again, and so nothing would appear to happen.
-      _counter++;
+      _selectedIndex = index;
     });
+    Navigator.pop(context); // Menutup Drawer setelah memilih item
   }
 
+  /// Fungsi untuk tampilan navigasi dan pengaturan halaman
   @override
   Widget build(BuildContext context) {
-    // This method is rerun every time setState is called, for instance as done
-    // by the _incrementCounter method above.
-    //
-    // The Flutter framework has been optimized to make rerunning build methods
-    // fast, so that you can just rebuild anything that needs updating rather
-    // than having to individually change instances of widgets.
     return Scaffold(
       appBar: AppBar(
-        // TRY THIS: Try changing the color here to a specific color (to
-        // Colors.amber, perhaps?) and trigger a hot reload to see the AppBar
-        // change color while the other colors stay the same.
-        backgroundColor: Theme.of(context).colorScheme.inversePrimary,
-        // Here we take the value from the MyHomePage object that was created by
-        // the App.build method, and use it to set our appbar title.
-        title: Text(widget.title),
+        title: const Text('Ruang Pribadi'),
       ),
-      body: Center(
-        // Center is a layout widget. It takes a single child and positions it
-        // in the middle of the parent.
-        child: Column(
-          // Column is also a layout widget. It takes a list of children and
-          // arranges them vertically. By default, it sizes itself to fit its
-          // children horizontally, and tries to be as tall as its parent.
-          //
-          // Column has various properties to control how it sizes itself and
-          // how it positions its children. Here we use mainAxisAlignment to
-          // center the children vertically; the main axis here is the vertical
-          // axis because Columns are vertical (the cross axis would be
-          // horizontal).
-          //
-          // TRY THIS: Invoke "debug painting" (choose the "Toggle Debug Paint"
-          // action in the IDE, or press "p" in the console), to see the
-          // wireframe for each widget.
-          mainAxisAlignment: MainAxisAlignment.center,
-          children: <Widget>[
-            const Text(
-              'You have pushed the button this many times:',
+      drawer: Drawer(
+        child: ListView(
+          padding: EdgeInsets.zero,
+          children: [
+            DrawerHeader(
+              decoration: BoxDecoration(
+                color: Colors.blue,
+              ),
+              child: Row(
+                mainAxisAlignment: MainAxisAlignment.spaceBetween,
+                crossAxisAlignment: CrossAxisAlignment.start,
+                children: [
+                  const Text(
+                    'Menu Navigasi',
+                    style: TextStyle(
+                      color: Colors.white,
+                      fontSize: 24,
+                    ),
+                  ),
+                  IconButton(
+                    icon: const Icon(Icons.settings, color: Colors.white),
+                    onPressed: () => _onItemTapped(0),
+                  ),
+                ],
+              ),
             ),
-            Text(
-              '$_counter',
-              style: Theme.of(context).textTheme.headlineMedium,
+            ListTile(
+              leading: const Icon(Icons.person),
+              title: const Text('Profil'),
+              selected: _selectedIndex == 1,
+              onTap: () => _onItemTapped(1),
+            ),
+            ListTile(
+              leading: const Icon(Icons.book),
+              title: const Text('Belajar Alfabet Jepang'),
+              selected: _selectedIndex == 2,
+              onTap: () => _onItemTapped(2),
+            ),
+            ListTile(
+              leading: const Icon(Icons.book),
+              title: const Text('Math Speedup'),
+              selected: _selectedIndex == 3,
+              onTap: () => _onItemTapped(3),
+            ),
+            ListTile(
+              leading: const Icon(Icons.book),
+              title: const Text('Pasgen'),
+              selected: _selectedIndex == 4,
+              onTap: () => _onItemTapped(4),
             ),
           ],
         ),
       ),
-      floatingActionButton: FloatingActionButton(
-        onPressed: _incrementCounter,
-        tooltip: 'Increment',
-        child: const Icon(Icons.add),
-      ), // This trailing comma makes auto-formatting nicer for build methods.
+      body: _pages[_selectedIndex], // Menampilkan halaman yang dipilih
+    );
+  }
+}
+
+/// Fungsi untuk halaman pengaturan/setting
+class PengaturanPage extends StatelessWidget {
+  const PengaturanPage({super.key});
+
+  @override
+  Widget build(BuildContext context) {
+    return Scaffold(
+      appBar: AppBar(title: const Text('Pengaturan')),
+      body: Padding(
+        padding: const EdgeInsets.all(16.0),
+        child: ValueListenableBuilder<bool>(
+          valueListenable: darkModeNotifier,
+          builder: (context, isDarkMode, child) {
+            return SwitchListTile(
+              title: const Text('Mode Gelap'),
+              value: isDarkMode,
+              onChanged: (bool value) {
+                darkModeNotifier.value = value;
+                saveDarkMode(value); // Simpan ke SharedPreferences
+              },
+            );
+          },
+        ),
+      ),
+    );
+  }
+}
+
+class PlaceholderWidget extends StatelessWidget {
+  const PlaceholderWidget({super.key});
+
+  @override
+  Widget build(BuildContext context) {
+    return const Center(
+      child: Text('Ruang Pilihan'),
     );
   }
 }
