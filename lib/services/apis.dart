@@ -504,17 +504,19 @@ class VideoApi {
   /// [GET /video/history] — Get download history
   Future<List<dynamic>> history() async {
     final r = await _c.get('/video/history');
+    if (r is Map && r['data'] is List) return r['data'] as List;
     return r is List ? r : [];
   }
 
-  /// [DELETE /video/{id}] — Delete download
+  /// [DELETE /video/{id}] — Delete download (may not exist yet)
   Future<Map<String, dynamic>> delete(int id) async {
     return (await _c.delete('/video/$id')) as Map<String, dynamic>;
   }
 
   /// Get stream URL for playing a downloaded video
-  String streamUrl(int recordId) {
-    return '${ApiConfig.baseUrl}${ApiConfig.prefix}/video/stream/$recordId';
+  String streamUrl(String fileName) {
+    final userId = ApiClient().username;
+    return '${ApiConfig.baseUrl}${ApiConfig.prefix}/video/download-file/$userId/$fileName';
   }
 
   // ── Admin: Cookies Management ──

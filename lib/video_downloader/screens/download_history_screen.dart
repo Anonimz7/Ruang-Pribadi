@@ -57,29 +57,11 @@ class _DownloadHistoryScreenState extends State<DownloadHistoryScreen> {
         (data) {
           try {
             final msg = jsonDecode(data);
-            final id = msg['id'];
             final status = msg['status'];
-            final progress = (msg['progress'] ?? 0).toDouble();
-            setState(() {
-              for (var i = 0; i < _records.length; i++) {
-                if (_records[i].id == id) {
-                  _records[i] = DownloadRecord(
-                    id: _records[i].id,
-                    url: _records[i].url,
-                    title: _records[i].title,
-                    thumbnail: _records[i].thumbnail,
-                    duration: _records[i].duration,
-                    ext: _records[i].ext,
-                    fileSize: _records[i].fileSize,
-                    status: status ?? _records[i].status,
-                    progress: progress,
-                    createdAt: _records[i].createdAt,
-                  );
-                  break;
-                }
-              }
-            });
-            if (status == 'completed') _loadHistory();
+            // When a download completes, refresh the list
+            if (status == 'completed' || status == 'finished') {
+              _loadHistory();
+            }
           } catch (_) {}
         },
         onDone: () {},
@@ -89,52 +71,24 @@ class _DownloadHistoryScreenState extends State<DownloadHistoryScreen> {
   }
 
   Future<void> _playVideo(DownloadRecord record) async {
-    final url = _videoApi.streamUrl(record.id);
+    if (record.fileName == null) return;
+    final url = _videoApi.streamUrl(record.fileName!);
     final uri = Uri.parse(url);
     if (await canLaunchUrl(uri)) {
       await launchUrl(uri, mode: LaunchMode.externalApplication);
     }
   }
 
-  Future<void> _deleteRecord(DownloadRecord record) async {
-    final confirm = await showDialog<bool>(
-      context: context,
-      builder: (ctx) => AlertDialog(
-        title: const Text('Hapus Download?'),
-        content: Text('Hapus "${record.title ?? 'video ini'}" dari riwayat?'),
-        actions: [
-          TextButton(onPressed: () => Navigator.pop(ctx, false), child: const Text('Batal')),
-          TextButton(
-            onPressed: () => Navigator.pop(ctx, true),
-            child: const Text('Hapus', style: TextStyle(color: Colors.red)),
-          ),
-        ],
-      ),
-    );
-
-    if (confirm == true) {
-      try {
-        await _videoApi.delete(record.id);
-        _loadHistory();
-      } catch (e) {
-        if (mounted) {
-          ScaffoldMessenger.of(context).showSnackBar(
-            SnackBar(content: Text('Gagal menghapus: $e')),
-          );
-        }
-      }
-    }
+  String _formatBytes(int? bytes) {
+    if (bytes == null || bytes == 0) return '—';
+    if (bytes < 1024 * 1024) return '${(bytes / 1024).toStringAsFixed(0)} KB';
+    return '${(bytes / 1024 / 1024).toStringAsFixed(1)} MB';
   }
 
-  String _formatDuration(int? seconds) {
-    if (seconds == null) return '';
-    final h = seconds ~/ 3600;
-    final m = (seconds % 3600) ~/ 60;
-    final s = seconds % 60;
-    if (h > 0) {
-      return '$h:${m.toString().padLeft(2, '0')}:${s.toString().padLeft(2, '0')}';
-    }
-    return '${m.toString().padLeft(2, '0')}:${s.toString().padLeft(2, '0')}';
+  String _formatDate(DateTime? dt) {
+    if (dt == null) return '';
+    return '${dt.day.toString().padLeft(2, '0')}/${dt.month.toString().padLeft(2, '0')}/${dt.year} '
+        '${dt.hour.toString().padLeft(2, '0')}:${dt.minute.toString().padLeft(2, '0')}';
   }
 
   @override
@@ -188,44 +142,38 @@ class _DownloadHistoryScreenState extends State<DownloadHistoryScreen> {
   }
 
   Widget _buildRecordCard(DownloadRecord record) {
+    // Extract extension from filename
+    final ext = record.fileName?.split('.').last.toUpperCase() ?? '';
+    final name = record.fileName ?? 'video';
+
     return Card(
       clipBehavior: Clip.antiAlias,
       margin: const EdgeInsets.symmetric(vertical: 4, horizontal: 4),
       child: InkWell(
-        onTap: record.isCompleted ? () => _playVideo(record) : null,
-        child: Row(
-          children: [
-            // Thumbnail
-            if (record.thumbnail != null)
-              Image.network(
-                record.thumbnail!,
-                width: 120,
-                height: 80,
-                fit: BoxFit.cover,
-                errorBuilder: (_, __, ___) => Container(
-                  width: 120,
-                  height: 80,
-                  color: Colors.grey.shade200,
-                  child: const Icon(Icons.broken_image),
-                ),
-              )
-            else
+        onTap: () => _playVideo(record),
+        child: Padding(
+          padding: const EdgeInsets.all(12),
+          child: Row(
+            children: [
+              // Icon
               Container(
-                width: 120,
-                height: 80,
-                color: Colors.grey.shade200,
-                child: const Icon(Icons.video_library, size: 32),
+                width: 48,
+                height: 48,
+                decoration: BoxDecoration(
+                  color: Colors.green.shade50,
+                  borderRadius: BorderRadius.circular(8),
+                ),
+                child: Icon(Icons.play_circle_fill,
+                    color: Colors.green.shade600, size: 28),
               ),
-
-            // Info
-            Expanded(
-              child: Padding(
-                padding: const EdgeInsets.all(10),
+              const SizedBox(width: 12),
+              // Info
+              Expanded(
                 child: Column(
                   crossAxisAlignment: CrossAxisAlignment.start,
                   children: [
                     Text(
-                      record.title ?? 'Video',
+                      name,
                       maxLines: 2,
                       overflow: TextOverflow.ellipsis,
                       style: const TextStyle(
@@ -236,88 +184,50 @@ class _DownloadHistoryScreenState extends State<DownloadHistoryScreen> {
                     const SizedBox(height: 4),
                     Row(
                       children: [
-                        // Status badge
-                        _buildStatusBadge(record),
-                        const SizedBox(width: 8),
-                        if (record.fileSizeText != '—')
-                          Text(
-                            record.fileSizeText,
-                            style: TextStyle(fontSize: 11, color: Colors.grey.shade500),
+                        if (ext.isNotEmpty) ...[
+                          Container(
+                            padding: const EdgeInsets.symmetric(
+                                horizontal: 5, vertical: 1),
+                            decoration: BoxDecoration(
+                              color: Colors.blue.shade50,
+                              borderRadius: BorderRadius.circular(4),
+                            ),
+                            child: Text(
+                              ext,
+                              style: TextStyle(
+                                fontSize: 10,
+                                fontWeight: FontWeight.bold,
+                                color: Colors.blue.shade700,
+                              ),
+                            ),
                           ),
-                        if (record.ext != null) ...[
-                          const SizedBox(width: 4),
-                          Text(
-                            record.ext!.toUpperCase(),
-                            style: TextStyle(fontSize: 11, color: Colors.grey.shade500),
-                          ),
+                          const SizedBox(width: 6),
                         ],
+                        Text(
+                          _formatBytes(record.fileSize),
+                          style: TextStyle(
+                              fontSize: 12, color: Colors.grey.shade500),
+                        ),
+                        const SizedBox(width: 6),
+                        Text(
+                          _formatDate(record.createdAt),
+                          style: TextStyle(
+                              fontSize: 11, color: Colors.grey.shade400),
+                        ),
                       ],
                     ),
-                    // Progress bar for active downloads
-                    if (record.isDownloading) ...[
-                      const SizedBox(height: 6),
-                      LinearProgressIndicator(
-                        value: record.progress / 100,
-                        minHeight: 4,
-                        borderRadius: BorderRadius.circular(2),
-                      ),
-                    ],
                   ],
                 ),
               ),
-            ),
-
-            // Actions
-            if (record.isCompleted)
+              // Play button
               IconButton(
-                icon: const Icon(Icons.play_circle_fill, color: Colors.green),
+                icon: Icon(Icons.play_arrow_rounded,
+                    color: Colors.green.shade600),
                 onPressed: () => _playVideo(record),
               ),
-            IconButton(
-              icon: Icon(Icons.delete_outline, color: Colors.red.shade300),
-              onPressed: () => _deleteRecord(record),
-            ),
-          ],
-        ),
-      ),
-    );
-  }
-
-  Widget _buildStatusBadge(DownloadRecord record) {
-    Color bgColor;
-    Color textColor;
-    IconData icon;
-
-    if (record.isCompleted) {
-      bgColor = Colors.green.shade50;
-      textColor = Colors.green.shade700;
-      icon = Icons.check_circle;
-    } else if (record.isFailed) {
-      bgColor = Colors.red.shade50;
-      textColor = Colors.red.shade700;
-      icon = Icons.error;
-    } else {
-      bgColor = Colors.blue.shade50;
-      textColor = Colors.blue.shade700;
-      icon = Icons.hourglass_top;
-    }
-
-    return Container(
-      padding: const EdgeInsets.symmetric(horizontal: 6, vertical: 2),
-      decoration: BoxDecoration(
-        color: bgColor,
-        borderRadius: BorderRadius.circular(4),
-      ),
-      child: Row(
-        mainAxisSize: MainAxisSize.min,
-        children: [
-          Icon(icon, size: 12, color: textColor),
-          const SizedBox(width: 3),
-          Text(
-            record.statusText,
-            style: TextStyle(fontSize: 10, color: textColor, fontWeight: FontWeight.w600),
+            ],
           ),
-        ],
+        ),
       ),
     );
   }

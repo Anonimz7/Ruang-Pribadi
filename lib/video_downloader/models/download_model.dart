@@ -144,82 +144,39 @@ class VideoFormat {
 /// A download record from the backend.
 class DownloadRecord {
   final int id;
-  final String? url;
-  final String? title;
-  final String? thumbnail;
-  final int? duration;
-  final String? uploader;
-  final String? ext;
-  final String? resolution;
+  final String? fileName;
+  final String? filePath;
   final int? fileSize;
-  final String status;
-  final double progress;
-  final String? errorMsg;
   final DateTime? createdAt;
 
   DownloadRecord({
-    required this.id,
-    this.url,
-    this.title,
-    this.thumbnail,
-    this.duration,
-    this.uploader,
-    this.ext,
-    this.resolution,
+    this.id = 0,
+    this.fileName,
+    this.filePath,
     this.fileSize,
-    this.status = 'pending',
-    this.progress = 0,
-    this.errorMsg,
     this.createdAt,
   });
 
   factory DownloadRecord.fromJson(Map<String, dynamic> json) {
     return DownloadRecord(
-      id: (json['id'] as num?)?.toInt() ?? 0,
-      url: json['url'],
-      title: json['title'],
-      thumbnail: json['thumbnail'],
-      duration: (json['duration'] as num?)?.toInt(),
-      uploader: json['uploader'],
-      ext: json['ext'],
-      resolution: json['resolution'],
+      id: (json['id'] as num?)?.toInt() ??
+          (json['file_name']?.hashCode ?? 0),
+      fileName: json['file_name'],
+      filePath: json['file_path'],
       fileSize: (json['file_size'] as num?)?.toInt(),
-      status: json['status'] ?? 'pending',
-      progress: (json['progress'] ?? 0).toDouble(),
-      errorMsg: json['error_msg'],
       createdAt: json['created_at'] != null
-          ? DateTime.tryParse(json['created_at'])
+          ? DateTime.tryParse(json['created_at'].toString()) ??
+              DateTime.fromMillisecondsSinceEpoch(
+                  (json['created_at'] as num).toInt() * 1000,
+                  isUtc: true)
           : null,
     );
   }
 
-  bool get isCompleted => status == 'completed';
-  bool get isDownloading =>
-      status == 'downloading' || status == 'pending' || status == 'processing';
-  bool get isFailed => status == 'failed';
-
-  String get fileSizeText {
+  String get fileSizeMb {
     if (fileSize == null || fileSize == 0) return '—';
-    if (fileSize! < 1024 * 1024) {
-      return '${(fileSize! / 1024).toStringAsFixed(0)} KB';
-    }
     return '${(fileSize! / 1024 / 1024).toStringAsFixed(1)} MB';
   }
 
-  String get statusText {
-    switch (status) {
-      case 'completed':
-        return 'Selesai';
-      case 'downloading':
-        return 'Mengunduh...';
-      case 'processing':
-        return 'Memproses...';
-      case 'pending':
-        return 'Menunggu...';
-      case 'failed':
-        return 'Gagal';
-      default:
-        return status;
-    }
-  }
+  String get title => fileName ?? 'Video';
 }

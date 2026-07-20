@@ -27,18 +27,18 @@ class _VideoDownloaderScreenState extends State<VideoDownloaderScreen> {
   VideoInfo? _videoInfo;
   bool _extracting = false;
   bool _downloading = false;
-  int? _downloadId;
   double _progress = 0;
   String _downloadStatus = '';
   String? _error;
+  String? _downloadSpeed;
+  String? _downloadEta;
 
   WebSocketChannel? _wsChannel;
   VideoFormat? _selectedFormat;
   bool _audioOnly = false;
 
-  // Collapsible group states
-  bool _combinedExpanded = true;
-  bool _videoOnlyExpanded = false;
+  // Collapsible group states — keyed by resolution string
+  final Map<String, bool> _groupExpanded = {};
   bool _audioExpanded = true;
 
   @override
@@ -71,46 +71,32 @@ class _VideoDownloaderScreenState extends State<VideoDownloaderScreen> {
       setState(() {
         _videoInfo = vi;
         _extracting = false;
+        _groupExpanded.clear();
 
-        // Find best format: prefer 720p combined, then 720p video-only, then first combined
-        final combined = vi.formats.where((f) => f.hasBothCodecs).toList();
-        final videoOnly = vi.formats.where((f) => f.isVideoOnly).toList();
+        // Group video formats by resolution
+        final resGroups = _groupByResolution(vi.formats);
+
+        // Find best format: prefer 1280p, then highest resolution
         VideoFormat? best;
-
-        // Try to find 720p
-        for (final f in combined) {
-          if ((f.resolution ?? '').contains('720') ||
-              (f.formatNote ?? '').contains('720')) {
-            best = f;
+        for (final entry in resGroups.entries) {
+          if (entry.key == '1280p') {
+            best = entry.value.first;
             break;
           }
         }
-        if (best == null) {
-          for (final f in videoOnly) {
-            if ((f.resolution ?? '').contains('720') ||
-                (f.formatNote ?? '').contains('720')) {
-              best = f;
-              break;
-            }
-          }
-        }
-        // Fallback: first combined, then first video-only
-        best ??= combined.isNotEmpty
-            ? combined.first
-            : (videoOnly.isNotEmpty ? videoOnly.first : null);
+        best ??= resGroups.values.firstOrNull?.first;
 
         _selectedFormat = best;
 
-        // Auto-expand the group containing the selected format
-        if (best != null) {
-          if (best.hasBothCodecs) {
-            _combinedExpanded = true;
-            _videoOnlyExpanded = false;
-          } else if (best.isVideoOnly) {
-            _combinedExpanded = false;
-            _videoOnlyExpanded = true;
+        // Default expand the 1280p group, or highest resolution
+        String expandKey = resGroups.keys.first;
+        for (final key in resGroups.keys) {
+          if (key == '1280p') {
+            expandKey = key;
+            break;
           }
         }
+        _groupExpanded[expandKey] = true;
       });
     } catch (e) {
       setState(() {
@@ -129,8 +115,13 @@ class _VideoDownloaderScreenState extends State<VideoDownloaderScreen> {
       _downloading = true;
       _progress = 0;
       _downloadStatus = 'Memulai...';
+      _downloadSpeed = null;
+      _downloadEta = null;
       _error = null;
     });
+
+    // Connect WebSocket FIRST to receive progress during download
+    _connectWebSocket();
 
     try {
       final result = await _videoApi.download(
@@ -138,26 +129,29 @@ class _VideoDownloaderScreenState extends State<VideoDownloaderScreen> {
         _audioOnly ? 'bestaudio' : (_selectedFormat?.formatId ?? 'best'),
         audioOnly: _audioOnly,
       );
-      final recordId = result['id'] as int;
-      setState(() {
-        _downloadId = recordId;
-        _downloadStatus = 'Mengunduh...';
-      });
-      _connectWebSocket(recordId);
-    } catch (e) {
+      // Download succeeded — backend returns file info directly
+      final data = (result['data'] ?? result) as Map<String, dynamic>;
       setState(() {
         _downloading = false;
-        _error =
-            'Download gagal: ${e.toString().replaceAll('Exception: ', '')}';
+        _progress = 100;
+        _downloadStatus = 'Selesai!';
       });
+    } catch (e) {
+      final errMsg =
+          'Download gagal: ${e.toString().replaceAll('Exception: ', '')}';
+      setState(() {
+        _downloading = false;
+        _error = errMsg;
+      });
+      _showSnackBar(errMsg, isError: true);
     }
   }
 
   // ── WebSocket Progress ──────────────────────────────────
-  void _connectWebSocket(int recordId) {
+  void _connectWebSocket() {
     try {
       final baseUrl = ApiConfig.baseUrl.replaceFirst('http', 'ws');
-      final userId = ApiClient().username; // use as channel key
+      final userId = ApiClient().username;
       final wsUrl = '$baseUrl/ws/video-progress/$userId';
       _wsChannel = WebSocketChannel.connect(Uri.parse(wsUrl));
 
@@ -165,19 +159,39 @@ class _VideoDownloaderScreenState extends State<VideoDownloaderScreen> {
         (data) {
           try {
             final msg = jsonDecode(data);
-            if (msg['id'] == recordId) {
+            final status = msg['status'] as String?;
+            if (status == null) return;
+
+            if (status == 'downloading') {
               final pct = (msg['progress'] ?? 0).toDouble();
-              final status = msg['status'] as String?;
+              final speed = msg['speed'] as String?;
+              final eta = msg['eta'] as String?;
               setState(() {
                 _progress = pct;
-                _downloadStatus = status ?? 'Mengunduh...';
-                if (status == 'completed') {
-                  _downloading = false;
-                } else if (status == 'failed') {
-                  _downloading = false;
-                  _error = msg['error'] ?? 'Download gagal';
-                }
+                _downloadSpeed = speed;
+                _downloadEta = eta;
+                _downloadStatus = 'Mengunduh... ${pct.toStringAsFixed(1)}%';
               });
+            } else if (status == 'completed' || status == 'finished') {
+              setState(() {
+                _progress = 100;
+                _downloadStatus = 'Selesai!';
+                _downloading = false;
+                _downloadSpeed = null;
+                _downloadEta = null;
+              });
+              _wsChannel?.sink.close();
+              _showSnackBar('Download selesai!', isError: false);
+            } else if (status == 'failed' || status == 'error') {
+              final msgText = msg['message'] ?? msg['error'] ?? 'Download gagal';
+              setState(() {
+                _downloading = false;
+                _error = msgText;
+                _downloadSpeed = null;
+                _downloadEta = null;
+              });
+              _wsChannel?.sink.close();
+              _showSnackBar('Download gagal: $msgText', isError: true);
             }
           } catch (_) {}
         },
@@ -185,6 +199,29 @@ class _VideoDownloaderScreenState extends State<VideoDownloaderScreen> {
         onError: (_) {},
       );
     } catch (_) {}
+  }
+
+  void _showSnackBar(String message, {bool isError = false}) {
+    if (!mounted) return;
+    ScaffoldMessenger.of(context).showSnackBar(
+      SnackBar(
+        content: Row(
+          children: [
+            Icon(
+              isError ? Icons.error_outline : Icons.check_circle_outline,
+              color: Colors.white,
+              size: 20,
+            ),
+            const SizedBox(width: 10),
+            Expanded(child: Text(message)),
+          ],
+        ),
+        backgroundColor: isError ? Colors.red.shade600 : Colors.green.shade600,
+        behavior: SnackBarBehavior.floating,
+        shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(10)),
+        duration: const Duration(seconds: 3),
+      ),
+    );
   }
 
   // ── Helpers ─────────────────────────────────────────────
@@ -464,11 +501,56 @@ class _VideoDownloaderScreenState extends State<VideoDownloaderScreen> {
     );
   }
 
+  /// Group video formats by resolution. Returns ordered map (highest first).
+  Map<String, List<VideoFormat>> _groupByResolution(List<VideoFormat> formats) {
+    final Map<String, List<VideoFormat>> groups = {};
+    for (final f in formats) {
+      if (f.isAudioOnly) continue;
+      final res = f.resolution ?? '';
+      if (res == 'audio only' || res.isEmpty) continue;
+
+      // Extract width from "WIDTHxHEIGHT" format (e.g. "1920x1080" → "1920p")
+      String? key;
+      final whMatch =
+          RegExp(r'^\s*(\d{2,5})\s*x\s*(\d{2,5})\s*$').firstMatch(res);
+      if (whMatch != null) {
+        key = '${whMatch.group(1)}p';
+      } else {
+        // Fallback: try formatNote like "1080p"
+        final noteMatch = RegExp(r'(\d{3,4})p').firstMatch(f.formatNote ?? '');
+        if (noteMatch != null) {
+          key = '${noteMatch.group(1)}p';
+        }
+      }
+      key ??= 'Lainnya';
+      groups.putIfAbsent(key, () => []).add(f);
+    }
+    // Sort each group: combined (video+audio) first, then video-only
+    for (final key in groups.keys) {
+      groups[key]!.sort((a, b) {
+        if (a.hasBothCodecs && !b.hasBothCodecs) return -1;
+        if (!a.hasBothCodecs && b.hasBothCodecs) return 1;
+        return 0;
+      });
+    }
+    // Sort groups by width number descending
+    final sorted = Map<String, List<VideoFormat>>.fromEntries(
+      groups.entries.toList()
+        ..sort((a, b) {
+          final aNum =
+              int.tryParse(a.key.replaceAll(RegExp(r'[^0-9]'), '')) ?? 0;
+          final bNum =
+              int.tryParse(b.key.replaceAll(RegExp(r'[^0-9]'), '')) ?? 0;
+          return bNum.compareTo(aNum);
+        }),
+    );
+    return sorted;
+  }
+
   Widget _buildFormatSelector() {
     final formats = _videoInfo!.formats;
-    final videoFormats = formats.where((f) => f.isVideoOnly).toList();
-    final combinedFormats = formats.where((f) => f.hasBothCodecs).toList();
     final audioFormats = formats.where((f) => f.isAudioOnly).toList();
+    final resGroups = _groupByResolution(formats);
 
     return Column(
       crossAxisAlignment: CrossAxisAlignment.start,
@@ -496,55 +578,20 @@ class _VideoDownloaderScreenState extends State<VideoDownloaderScreen> {
             children: audioFormats.map((f) => _buildFormatTile(f)).toList(),
           ),
 
-        // ── Video formats ──
+        // ── Video formats grouped by resolution ──
         if (!_audioOnly) ...[
-          if (combinedFormats.isNotEmpty)
+          for (final entry in resGroups.entries)
             _buildCollapsibleGroup(
-              title: 'Video + Audio',
-              count: combinedFormats.length,
-              expanded: _combinedExpanded,
-              onToggle: () =>
-                  setState(() => _combinedExpanded = !_combinedExpanded),
-              children:
-                  combinedFormats.map((f) => _buildFormatTile(f)).toList(),
+              title: entry.key,
+              count: entry.value.length,
+              expanded: _groupExpanded[entry.key] ?? false,
+              onToggle: () => setState(() {
+                _groupExpanded[entry.key] =
+                    !(_groupExpanded[entry.key] ?? false);
+              }),
+              children: _buildFormatTilesWithSeparator(entry.value),
             ),
-          if (videoFormats.isNotEmpty) ...[
-            _buildCollapsibleGroup(
-              title: 'Video Saja (tanpa audio)',
-              count: videoFormats.length,
-              expanded: _videoOnlyExpanded,
-              onToggle: () =>
-                  setState(() => _videoOnlyExpanded = !_videoOnlyExpanded),
-              children: [
-                // Info banner
-                Container(
-                  margin: const EdgeInsets.only(bottom: 8),
-                  padding: const EdgeInsets.all(10),
-                  decoration: BoxDecoration(
-                    color: Colors.blue.shade50,
-                    borderRadius: BorderRadius.circular(8),
-                    border: Border.all(color: Colors.blue.shade200),
-                  ),
-                  child: Row(
-                    children: [
-                      Icon(Icons.info_outline,
-                          size: 16, color: Colors.blue.shade700),
-                      const SizedBox(width: 8),
-                      Expanded(
-                        child: Text(
-                          'Video-only akan di-download lalu di-merge otomatis dengan audio terbaik',
-                          style: TextStyle(
-                              fontSize: 12, color: Colors.blue.shade700),
-                        ),
-                      ),
-                    ],
-                  ),
-                ),
-                ...videoFormats.map((f) => _buildFormatTile(f)),
-              ],
-            ),
-          ],
-          if (combinedFormats.isEmpty && videoFormats.isEmpty)
+          if (resGroups.isEmpty)
             Padding(
               padding: const EdgeInsets.symmetric(vertical: 16),
               child: Text(
@@ -632,6 +679,38 @@ class _VideoDownloaderScreenState extends State<VideoDownloaderScreen> {
     );
   }
 
+  List<Widget> _buildFormatTilesWithSeparator(List<VideoFormat> formats) {
+    final widgets = <Widget>[];
+    bool? lastWasCombined;
+    for (final f in formats) {
+      final isCombined = f.hasBothCodecs;
+      // Add separator when transitioning from combined to video-only
+      if (lastWasCombined == true && !isCombined) {
+        widgets.add(Padding(
+          padding: const EdgeInsets.symmetric(vertical: 4),
+          child: Row(
+            children: [
+              Expanded(
+                  child: Divider(color: Colors.grey.shade300, thickness: 1)),
+              Padding(
+                padding: const EdgeInsets.symmetric(horizontal: 8),
+                child: Text(
+                  'Video Only (auto-merge)',
+                  style: TextStyle(fontSize: 11, color: Colors.grey.shade500),
+                ),
+              ),
+              Expanded(
+                  child: Divider(color: Colors.grey.shade300, thickness: 1)),
+            ],
+          ),
+        ));
+      }
+      widgets.add(_buildFormatTile(f));
+      lastWasCombined = isCombined;
+    }
+    return widgets;
+  }
+
   Widget _buildFormatTile(VideoFormat f) {
     final isSelected = _selectedFormat?.formatId == f.formatId;
     return RadioListTile<VideoFormat>(
@@ -703,6 +782,7 @@ class _VideoDownloaderScreenState extends State<VideoDownloaderScreen> {
   }
 
   Widget _buildProgressSection() {
+    final isComplete = _progress >= 100;
     return Card(
       child: Padding(
         padding: const EdgeInsets.all(16),
@@ -712,13 +792,13 @@ class _VideoDownloaderScreenState extends State<VideoDownloaderScreen> {
             Row(
               children: [
                 Icon(
-                  _progress >= 100 ? Icons.check_circle : Icons.downloading,
-                  color: _progress >= 100 ? Colors.green : Colors.blue,
+                  isComplete ? Icons.check_circle : Icons.downloading,
+                  color: isComplete ? Colors.green : Colors.blue,
                 ),
                 const SizedBox(width: 8),
                 Expanded(
                   child: Text(
-                    _progress >= 100 ? 'Selesai!' : 'Mengunduh...',
+                    isComplete ? 'Selesai!' : 'Mengunduh...',
                     style: const TextStyle(fontWeight: FontWeight.bold),
                   ),
                 ),
@@ -732,9 +812,37 @@ class _VideoDownloaderScreenState extends State<VideoDownloaderScreen> {
               borderRadius: BorderRadius.circular(3),
             ),
             const SizedBox(height: 8),
-            Text(
-              _downloadStatus,
-              style: TextStyle(fontSize: 12, color: Colors.grey.shade600),
+            // Speed and ETA row
+            Row(
+              children: [
+                Text(
+                  _downloadStatus,
+                  style: TextStyle(fontSize: 12, color: Colors.grey.shade600),
+                ),
+                const Spacer(),
+                if (_downloadSpeed != null)
+                  Text(
+                    _downloadSpeed!,
+                    style: TextStyle(
+                      fontSize: 11,
+                      fontWeight: FontWeight.w600,
+                      color: Colors.blue.shade600,
+                    ),
+                  ),
+                if (_downloadSpeed != null && _downloadEta != null)
+                  Text(
+                    ' · ',
+                    style: TextStyle(fontSize: 11, color: Colors.grey.shade400),
+                  ),
+                if (_downloadEta != null)
+                  Text(
+                    'Sisa ${_downloadEta!}',
+                    style: TextStyle(
+                      fontSize: 11,
+                      color: Colors.grey.shade500,
+                    ),
+                  ),
+              ],
             ),
           ],
         ),
