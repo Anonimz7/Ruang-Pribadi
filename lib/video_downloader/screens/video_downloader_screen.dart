@@ -40,6 +40,13 @@ class _VideoDownloaderScreenState extends State<VideoDownloaderScreen> {
   // Collapsible group states — keyed by resolution string
   final Map<String, bool> _groupExpanded = {};
   bool _audioExpanded = true;
+  List<Map<String, dynamic>> _activeDownloads = [];
+
+  @override
+  void initState() {
+    super.initState();
+    _checkActiveDownloads();
+  }
 
   @override
   void dispose() {
@@ -47,6 +54,58 @@ class _VideoDownloaderScreenState extends State<VideoDownloaderScreen> {
     _focusNode.dispose();
     _wsChannel?.sink.close();
     super.dispose();
+  }
+
+  // ── Check active downloads on screen open ──────────────
+  Future<void> _checkActiveDownloads() async {
+    try {
+      final data = await _videoApi.activeDownloads();
+      final items = data
+          .map((e) => Map<String, dynamic>.from(e as Map))
+          .toList();
+      if (items.isNotEmpty && mounted) {
+        setState(() => _activeDownloads = items);
+        _showActiveBanner(items);
+      }
+    } catch (_) {}
+  }
+
+  void _showActiveBanner(List<Map<String, dynamic>> items) {
+    final count = items.length;
+    final label = count == 1
+        ? '1 download sedang berjalan'
+        : '$count download sedang berjalan';
+    ScaffoldMessenger.of(context).showSnackBar(
+      SnackBar(
+        content: Row(
+          children: [
+            const SizedBox(
+              width: 16,
+              height: 16,
+              child: CircularProgressIndicator(strokeWidth: 2, color: Colors.white),
+            ),
+            const SizedBox(width: 10),
+            Expanded(
+              child: Text(label, style: const TextStyle(fontWeight: FontWeight.w500)),
+            ),
+            TextButton(
+              onPressed: () {
+                ScaffoldMessenger.of(context).hideCurrentSnackBar();
+                Navigator.push(
+                  context,
+                  MaterialPageRoute(builder: (_) => const DownloadHistoryScreen()),
+                );
+              },
+              child: const Text('Lihat', style: TextStyle(color: Colors.white)),
+            ),
+          ],
+        ),
+        backgroundColor: Colors.blue.shade700,
+        behavior: SnackBarBehavior.floating,
+        shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(10)),
+        duration: const Duration(seconds: 5),
+      ),
+    );
   }
 
   // ── Extract ─────────────────────────────────────────────

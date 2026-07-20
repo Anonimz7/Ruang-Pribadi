@@ -79,6 +79,53 @@ class _DownloadHistoryScreenState extends State<DownloadHistoryScreen> {
     }
   }
 
+  Future<void> _deleteRecord(DownloadRecord record) async {
+    if (record.fileName == null) return;
+    final confirm = await showDialog<bool>(
+      context: context,
+      builder: (ctx) => AlertDialog(
+        title: const Text('Hapus Video?'),
+        content: Text('Hapus "${record.fileName}" dari perangkat?'),
+        actions: [
+          TextButton(
+            onPressed: () => Navigator.pop(ctx, false),
+            child: const Text('Batal'),
+          ),
+          TextButton(
+            onPressed: () => Navigator.pop(ctx, true),
+            child: const Text('Hapus', style: TextStyle(color: Colors.red)),
+          ),
+        ],
+      ),
+    );
+    if (confirm != true) return;
+    try {
+      await _videoApi.deleteVideo(record.fileName!);
+      setState(() => _records.removeWhere((r) => r.fileName == record.fileName));
+      if (mounted) {
+        ScaffoldMessenger.of(context).showSnackBar(
+          SnackBar(
+            content: Text('${record.fileName} dihapus'),
+            backgroundColor: Colors.green.shade600,
+            behavior: SnackBarBehavior.floating,
+            shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(10)),
+          ),
+        );
+      }
+    } catch (e) {
+      if (mounted) {
+        ScaffoldMessenger.of(context).showSnackBar(
+          SnackBar(
+            content: Text('Gagal menghapus: $e'),
+            backgroundColor: Colors.red.shade600,
+            behavior: SnackBarBehavior.floating,
+            shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(10)),
+          ),
+        );
+      }
+    }
+  }
+
   String _formatBytes(int? bytes) {
     if (bytes == null || bytes == 0) return '—';
     if (bytes < 1024 * 1024) return '${(bytes / 1024).toStringAsFixed(0)} KB';
@@ -224,6 +271,12 @@ class _DownloadHistoryScreenState extends State<DownloadHistoryScreen> {
                 icon: Icon(Icons.play_arrow_rounded,
                     color: Colors.green.shade600),
                 onPressed: () => _playVideo(record),
+              ),
+              // Delete button
+              IconButton(
+                icon: Icon(Icons.delete_outline,
+                    color: Colors.red.shade300),
+                onPressed: () => _deleteRecord(record),
               ),
             ],
           ),

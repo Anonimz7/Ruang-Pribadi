@@ -508,9 +508,16 @@ class VideoApi {
     return r is List ? r : [];
   }
 
-  /// [DELETE /video/{id}] — Delete download (may not exist yet)
-  Future<Map<String, dynamic>> delete(int id) async {
-    return (await _c.delete('/video/$id')) as Map<String, dynamic>;
+  /// [GET /video/active] — Get currently active downloads
+  Future<List<dynamic>> activeDownloads() async {
+    final r = await _c.get('/video/active');
+    if (r is Map && r['data'] is List) return r['data'] as List;
+    return r is List ? r : [];
+  }
+
+  /// [DELETE /video/{file_name}] — Delete a downloaded video
+  Future<Map<String, dynamic>> deleteVideo(String fileName) async {
+    return (await _c.delete('/video/$fileName')) as Map<String, dynamic>;
   }
 
   /// Get stream URL for playing a downloaded video
