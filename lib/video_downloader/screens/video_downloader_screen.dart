@@ -1,13 +1,10 @@
 import 'dart:async';
-import 'dart:convert';
 import 'dart:io';
 import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
 import 'package:url_launcher/url_launcher.dart';
-import 'package:web_socket_channel/web_socket_channel.dart';
 import '../models/download_model.dart';
 import '../../services/apis.dart';
-import '../../services/api_config.dart';
 import '../../services/api_client.dart';
 import 'download_history_screen.dart';
 import '../../settings/admin_cookies_screen.dart';
@@ -33,7 +30,7 @@ class _VideoDownloaderScreenState extends State<VideoDownloaderScreen> {
   String? _downloadSpeed;
   String? _downloadEta;
 
-  WebSocketChannel? _wsChannel;
+  Timer? _pollTimer;
   VideoFormat? _selectedFormat;
   bool _audioOnly = false;
 
@@ -50,9 +47,9 @@ class _VideoDownloaderScreenState extends State<VideoDownloaderScreen> {
 
   @override
   void dispose() {
+    _pollTimer?.cancel();
     _urlCtrl.dispose();
     _focusNode.dispose();
-    _wsChannel?.sink.close();
     super.dispose();
   }
 
@@ -179,8 +176,8 @@ class _VideoDownloaderScreenState extends State<VideoDownloaderScreen> {
       _error = null;
     });
 
-    // Connect WebSocket FIRST to receive progress during download
-    _connectWebSocket();
+    // Start polling for progress (works through Cloudflare proxies)
+    _startPolling();
 
     try {
       final result = await _videoApi.download(
@@ -188,76 +185,62 @@ class _VideoDownloaderScreenState extends State<VideoDownloaderScreen> {
         _audioOnly ? 'bestaudio' : (_selectedFormat?.formatId ?? 'best'),
         audioOnly: _audioOnly,
       );
-      // Download succeeded — backend returns file info directly
+      // Download succeeded
+      _stopPolling();
       final data = (result['data'] ?? result) as Map<String, dynamic>;
       setState(() {
         _downloading = false;
         _progress = 100;
         _downloadStatus = 'Selesai!';
+        _downloadSpeed = null;
+        _downloadEta = null;
       });
+      _showSnackBar('Download selesai!', isError: false);
     } catch (e) {
+      _stopPolling();
       final errMsg =
           'Download gagal: ${e.toString().replaceAll('Exception: ', '')}';
       setState(() {
         _downloading = false;
         _error = errMsg;
+        _downloadSpeed = null;
+        _downloadEta = null;
       });
       _showSnackBar(errMsg, isError: true);
     }
   }
 
-  // ── WebSocket Progress ──────────────────────────────────
-  void _connectWebSocket() {
-    try {
-      final baseUrl = ApiConfig.baseUrl.replaceFirst('http', 'ws');
-      final userId = ApiClient().username;
-      final wsUrl = '$baseUrl/ws/video-progress/$userId';
-      _wsChannel = WebSocketChannel.connect(Uri.parse(wsUrl));
+  // ── HTTP Polling for progress ───────────────────────────
+  void _startPolling() {
+    _pollTimer?.cancel();
+    _pollTimer = Timer.periodic(const Duration(seconds: 1), (_) async {
+      if (!_downloading) {
+        _stopPolling();
+        return;
+      }
+      try {
+        final active = await _videoApi.activeDownloads();
+        if (active.isEmpty) return;
+        // Pick the most recent download (first in list)
+        final dl = active.first as Map<String, dynamic>;
+        final pct = (dl['progress'] ?? 0).toDouble();
+        final speed = dl['speed'] as String?;
+        final eta = dl['eta'] as String?;
+        if (mounted && _downloading) {
+          setState(() {
+            _progress = pct;
+            _downloadSpeed = speed;
+            _downloadEta = eta;
+            _downloadStatus = 'Mengunduh... ${pct.toStringAsFixed(1)}%';
+          });
+        }
+      } catch (_) {}
+    });
+  }
 
-      _wsChannel!.stream.listen(
-        (data) {
-          try {
-            final msg = jsonDecode(data);
-            final status = msg['status'] as String?;
-            if (status == null) return;
-
-            if (status == 'downloading') {
-              final pct = (msg['progress'] ?? 0).toDouble();
-              final speed = msg['speed'] as String?;
-              final eta = msg['eta'] as String?;
-              setState(() {
-                _progress = pct;
-                _downloadSpeed = speed;
-                _downloadEta = eta;
-                _downloadStatus = 'Mengunduh... ${pct.toStringAsFixed(1)}%';
-              });
-            } else if (status == 'completed' || status == 'finished') {
-              setState(() {
-                _progress = 100;
-                _downloadStatus = 'Selesai!';
-                _downloading = false;
-                _downloadSpeed = null;
-                _downloadEta = null;
-              });
-              _wsChannel?.sink.close();
-              _showSnackBar('Download selesai!', isError: false);
-            } else if (status == 'failed' || status == 'error') {
-              final msgText = msg['message'] ?? msg['error'] ?? 'Download gagal';
-              setState(() {
-                _downloading = false;
-                _error = msgText;
-                _downloadSpeed = null;
-                _downloadEta = null;
-              });
-              _wsChannel?.sink.close();
-              _showSnackBar('Download gagal: $msgText', isError: true);
-            }
-          } catch (_) {}
-        },
-        onDone: () {},
-        onError: (_) {},
-      );
-    } catch (_) {}
+  void _stopPolling() {
+    _pollTimer?.cancel();
+    _pollTimer = null;
   }
 
   void _showSnackBar(String message, {bool isError = false}) {
