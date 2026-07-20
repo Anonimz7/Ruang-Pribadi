@@ -20,6 +20,7 @@ class _QuizScreenState extends State<QuizScreen> {
     super.initState();
     final settings = Provider.of<SettingsProvider>(context, listen: false);
     Future.microtask(() {
+      if (!mounted) return;
       Provider.of<QuizProvider>(context, listen: false).startQuestion(settings);
     });
   }
@@ -34,18 +35,20 @@ class _QuizScreenState extends State<QuizScreen> {
             quiz.remainingTime == 0 &&
             !navigated) {
           navigated = true;
+          final navigator = Navigator.of(context);
           Future.microtask(() {
-            Navigator.pushReplacement(
-              context,
+            if (!mounted) return;
+            navigator.pushReplacement(
               MaterialPageRoute(builder: (_) => const SessionResultScreen()),
             );
           });
         }
         if (quiz.isQuizFinished && !navigated) {
           navigated = true;
+          final navigator = Navigator.of(context);
           Future.microtask(() {
-            Navigator.pushReplacement(
-              context,
+            if (!mounted) return;
+            navigator.pushReplacement(
               MaterialPageRoute(builder: (_) => const FinalResultScreen()),
             );
           });

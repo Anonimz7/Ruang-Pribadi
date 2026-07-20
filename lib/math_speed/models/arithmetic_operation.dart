@@ -11,7 +11,5 @@ String opToString(ArithmeticOperation op) {
       return "Perkalian";
     case ArithmeticOperation.division:
       return "Pembagian";
-    default:
-      return "";
   }
 }

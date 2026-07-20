@@ -1,0 +1,190 @@
+/// Video information extracted from a URL.
+class VideoInfo {
+  final String? title;
+  final String? thumbnail;
+  final int? duration;
+  final String? uploader;
+  final String? webpageUrl;
+  final String? extractor;
+  final List<VideoFormat> formats;
+
+  VideoInfo({
+    this.title,
+    this.thumbnail,
+    this.duration,
+    this.uploader,
+    this.webpageUrl,
+    this.extractor,
+    this.formats = const [],
+  });
+
+  factory VideoInfo.fromJson(Map<String, dynamic> json) {
+    return VideoInfo(
+      title: json['title'],
+      thumbnail: json['thumbnail'],
+      duration: json['duration'],
+      uploader: json['uploader'],
+      webpageUrl: json['webpage_url'],
+      extractor: json['extractor'],
+      formats: (json['formats'] as List? ?? [])
+          .map((f) => VideoFormat.fromJson(f))
+          .toList(),
+    );
+  }
+
+  String get durationText {
+    if (duration == null) return '--:--';
+    final m = duration! ~/ 60;
+    final s = duration! % 60;
+    return '${m.toString().padLeft(2, '0')}:${s.toString().padLeft(2, '0')}';
+  }
+}
+
+/// A single format option for a video.
+class VideoFormat {
+  final String? formatId;
+  final String? ext;
+  final String? resolution;
+  final int? fps;
+  final int? filesize;
+  final String? vcodec;
+  final String? acodec;
+  final double? abr;
+  final String? formatNote;
+
+  VideoFormat({
+    this.formatId,
+    this.ext,
+    this.resolution,
+    this.fps,
+    this.filesize,
+    this.vcodec,
+    this.acodec,
+    this.abr,
+    this.formatNote,
+  });
+
+  factory VideoFormat.fromJson(Map<String, dynamic> json) {
+    return VideoFormat(
+      formatId: json['format_id'],
+      ext: json['ext'],
+      resolution: json['resolution'],
+      fps: (json['fps'] as num?)?.toInt(),
+      filesize: (json['filesize'] as num?)?.toInt(),
+      vcodec: json['vcodec'],
+      acodec: json['acodec'],
+      abr: (json['abr'] as num?)?.toDouble(),
+      formatNote: json['format_note'],
+    );
+  }
+
+  bool get isVideoOnly =>
+      (vcodec != null && vcodec != 'none') && (acodec == null || acodec == 'none');
+
+  bool get isAudioOnly =>
+      (acodec != null && acodec != 'none') && (vcodec == null || vcodec == 'none');
+
+  String get fileSizeMb {
+    if (filesize == null || filesize == 0) return '—';
+    return '${(filesize! / 1024 / 1024).toStringAsFixed(1)} MB';
+  }
+
+  String get fileSizeKb {
+    if (filesize == null || filesize == 0) return '—';
+    if (filesize! < 1024 * 1024) return '${(filesize! / 1024).toStringAsFixed(0)} KB';
+    return fileSizeMb;
+  }
+
+  String get label {
+    final parts = <String>[
+      if (resolution != null && resolution != 'audio only') resolution!,
+      if (ext != null) ext!.toUpperCase(),
+      if (fps != null && fps! > 30) '${fps}fps',
+      if (formatNote != null && formatNote!.isNotEmpty) formatNote!,
+    ];
+    return parts.join(' · ');
+  }
+}
+
+/// A download record from the backend.
+class DownloadRecord {
+  final int id;
+  final String? url;
+  final String? title;
+  final String? thumbnail;
+  final int? duration;
+  final String? uploader;
+  final String? ext;
+  final String? resolution;
+  final int? fileSize;
+  final String status;
+  final double progress;
+  final String? errorMsg;
+  final DateTime? createdAt;
+
+  DownloadRecord({
+    required this.id,
+    this.url,
+    this.title,
+    this.thumbnail,
+    this.duration,
+    this.uploader,
+    this.ext,
+    this.resolution,
+    this.fileSize,
+    this.status = 'pending',
+    this.progress = 0,
+    this.errorMsg,
+    this.createdAt,
+  });
+
+  factory DownloadRecord.fromJson(Map<String, dynamic> json) {
+    return DownloadRecord(
+      id: (json['id'] as num?)?.toInt() ?? 0,
+      url: json['url'],
+      title: json['title'],
+      thumbnail: json['thumbnail'],
+      duration: (json['duration'] as num?)?.toInt(),
+      uploader: json['uploader'],
+      ext: json['ext'],
+      resolution: json['resolution'],
+      fileSize: (json['file_size'] as num?)?.toInt(),
+      status: json['status'] ?? 'pending',
+      progress: (json['progress'] ?? 0).toDouble(),
+      errorMsg: json['error_msg'],
+      createdAt: json['created_at'] != null
+          ? DateTime.tryParse(json['created_at'])
+          : null,
+    );
+  }
+
+  bool get isCompleted => status == 'completed';
+  bool get isDownloading =>
+      status == 'downloading' || status == 'pending' || status == 'processing';
+  bool get isFailed => status == 'failed';
+
+  String get fileSizeText {
+    if (fileSize == null || fileSize == 0) return '—';
+    if (fileSize! < 1024 * 1024) {
+      return '${(fileSize! / 1024).toStringAsFixed(0)} KB';
+    }
+    return '${(fileSize! / 1024 / 1024).toStringAsFixed(1)} MB';
+  }
+
+  String get statusText {
+    switch (status) {
+      case 'completed':
+        return 'Selesai';
+      case 'downloading':
+        return 'Mengunduh...';
+      case 'processing':
+        return 'Memproses...';
+      case 'pending':
+        return 'Menunggu...';
+      case 'failed':
+        return 'Gagal';
+      default:
+        return status;
+    }
+  }
+}

@@ -114,25 +114,19 @@ class _HomeScreenState extends State<HomeScreen> {
             ),
             const SizedBox(height: 16),
             const Text("Jumlah Soal per Sesi:", style: TextStyle(fontSize: 18)),
-            Row(
-              children: [
-                Radio<int>(
-                  value: 10,
-                  groupValue: settings.questionsPerSession,
-                  onChanged: (val) {
-                    if (val != null) settings.updateQuestionsPerSession(val);
-                  },
-                ),
-                const Text("10 Soal"),
-                Radio<int>(
-                  value: 20,
-                  groupValue: settings.questionsPerSession,
-                  onChanged: (val) {
-                    if (val != null) settings.updateQuestionsPerSession(val);
-                  },
-                ),
-                const Text("20 Soal"),
-              ],
+            RadioGroup<int>(
+              groupValue: settings.questionsPerSession,
+              onChanged: (int? val) {
+                if (val != null) settings.updateQuestionsPerSession(val);
+              },
+              child: Row(
+                children: [
+                  Radio<int>(value: 10),
+                  const Text("10 Soal"),
+                  Radio<int>(value: 20),
+                  const Text("20 Soal"),
+                ],
+              ),
             ),
             const SizedBox(height: 16),
             const Text("Waktu per Soal (detik):",

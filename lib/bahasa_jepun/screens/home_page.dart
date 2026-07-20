@@ -51,18 +51,23 @@ class _HomePageState extends State<HomePage> {
                   mainAxisSize: MainAxisSize.min,
                   children: [
                     if (selectedJenis != null)
-                      ...kategoriOptions[selectedJenis!]!.map((kategori) {
-                        return RadioListTile(
-                          title: Text(kategori),
-                          value: kategori,
-                          groupValue: selectedKategori,
-                          onChanged: (value) {
-                            setStateDialog(() {
-                              selectedKategori = value;
-                            });
-                          },
-                        );
-                      }),
+                      RadioGroup<String>(
+                        groupValue: selectedKategori,
+                        onChanged: (String? value) {
+                          setStateDialog(() {
+                            selectedKategori = value;
+                          });
+                        },
+                        child: Column(
+                          children: kategoriOptions[selectedJenis!]!
+                              .map((kategori) {
+                            return RadioListTile<String>(
+                              title: Text(kategori),
+                              value: kategori,
+                            );
+                          }).toList(),
+                        ),
+                      ),
                     SwitchListTile(
                       title: const Text("Acak Data"),
                       value: isAcak,
