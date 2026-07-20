@@ -36,6 +36,11 @@ class _VideoDownloaderScreenState extends State<VideoDownloaderScreen> {
   VideoFormat? _selectedFormat;
   bool _audioOnly = false;
 
+  // Collapsible group states
+  bool _combinedExpanded = true;
+  bool _videoOnlyExpanded = false;
+  bool _audioExpanded = true;
+
   @override
   void dispose() {
     _urlCtrl.dispose();
@@ -61,13 +66,50 @@ class _VideoDownloaderScreenState extends State<VideoDownloaderScreen> {
 
     try {
       final info = await _videoApi.extract(url);
-      final vi = VideoInfo.fromJson(info);
+      final vi =
+          VideoInfo.fromJson((info['data'] ?? info) as Map<String, dynamic>);
       setState(() {
         _videoInfo = vi;
         _extracting = false;
-        // Auto-select best format
-        if (vi.formats.isNotEmpty) {
-          _selectedFormat = vi.formats.first;
+
+        // Find best format: prefer 720p combined, then 720p video-only, then first combined
+        final combined = vi.formats.where((f) => f.hasBothCodecs).toList();
+        final videoOnly = vi.formats.where((f) => f.isVideoOnly).toList();
+        VideoFormat? best;
+
+        // Try to find 720p
+        for (final f in combined) {
+          if ((f.resolution ?? '').contains('720') ||
+              (f.formatNote ?? '').contains('720')) {
+            best = f;
+            break;
+          }
+        }
+        if (best == null) {
+          for (final f in videoOnly) {
+            if ((f.resolution ?? '').contains('720') ||
+                (f.formatNote ?? '').contains('720')) {
+              best = f;
+              break;
+            }
+          }
+        }
+        // Fallback: first combined, then first video-only
+        best ??= combined.isNotEmpty
+            ? combined.first
+            : (videoOnly.isNotEmpty ? videoOnly.first : null);
+
+        _selectedFormat = best;
+
+        // Auto-expand the group containing the selected format
+        if (best != null) {
+          if (best.hasBothCodecs) {
+            _combinedExpanded = true;
+            _videoOnlyExpanded = false;
+          } else if (best.isVideoOnly) {
+            _combinedExpanded = false;
+            _videoOnlyExpanded = true;
+          }
         }
       });
     } catch (e) {
@@ -105,7 +147,8 @@ class _VideoDownloaderScreenState extends State<VideoDownloaderScreen> {
     } catch (e) {
       setState(() {
         _downloading = false;
-        _error = 'Download gagal: ${e.toString().replaceAll('Exception: ', '')}';
+        _error =
+            'Download gagal: ${e.toString().replaceAll('Exception: ', '')}';
       });
     }
   }
@@ -225,9 +268,7 @@ class _VideoDownloaderScreenState extends State<VideoDownloaderScreen> {
           ],
 
           // ── Download Button ──
-          if (_videoInfo != null &&
-              !_extracting &&
-              !_downloading)
+          if (_videoInfo != null && !_extracting && !_downloading)
             _buildDownloadButton(),
         ],
       ),
@@ -327,7 +368,7 @@ class _VideoDownloaderScreenState extends State<VideoDownloaderScreen> {
       child: Column(
         crossAxisAlignment: CrossAxisAlignment.start,
         children: [
-          // Thumbnail
+          // Thumbnail with duration badge
           if (info.thumbnail != null)
             Stack(
               alignment: Alignment.bottomRight,
@@ -340,47 +381,80 @@ class _VideoDownloaderScreenState extends State<VideoDownloaderScreen> {
                   errorBuilder: (_, __, ___) => Container(
                     height: 200,
                     color: Colors.grey.shade200,
-                    child: const Center(child: Icon(Icons.broken_image, size: 48)),
+                    child:
+                        const Center(child: Icon(Icons.broken_image, size: 48)),
                   ),
                 ),
                 if (info.duration != null)
                   Container(
                     margin: const EdgeInsets.all(8),
-                    padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 4),
+                    padding:
+                        const EdgeInsets.symmetric(horizontal: 8, vertical: 4),
                     decoration: BoxDecoration(
                       color: Colors.black87,
-                      borderRadius: BorderRadius.circular(4),
+                      borderRadius: BorderRadius.circular(6),
                     ),
                     child: Text(
                       _formatDuration(info.duration),
-                      style: const TextStyle(color: Colors.white, fontSize: 12),
+                      style: const TextStyle(
+                        color: Colors.white,
+                        fontSize: 12,
+                        fontWeight: FontWeight.w500,
+                      ),
                     ),
                   ),
               ],
             ),
-          // Info
+
+          // Video info
           Padding(
-            padding: const EdgeInsets.all(12),
+            padding: const EdgeInsets.fromLTRB(14, 12, 14, 10),
             child: Column(
               crossAxisAlignment: CrossAxisAlignment.start,
               children: [
                 Text(
                   info.title ?? 'Unknown',
-                  style: const TextStyle(fontWeight: FontWeight.bold, fontSize: 15),
+                  style: const TextStyle(
+                    fontWeight: FontWeight.bold,
+                    fontSize: 15,
+                    height: 1.3,
+                  ),
                   maxLines: 2,
                   overflow: TextOverflow.ellipsis,
                 ),
-                if (info.uploader != null) ...[
-                  const SizedBox(height: 4),
-                  Text(
-                    info.uploader!,
-                    style: TextStyle(color: Colors.grey.shade600, fontSize: 13),
-                  ),
-                ],
-                const SizedBox(height: 4),
-                Text(
-                  '${info.formats.length} format tersedia',
-                  style: TextStyle(color: Colors.grey.shade500, fontSize: 12),
+                const SizedBox(height: 6),
+                Row(
+                  children: [
+                    if (info.uploader != null) ...[
+                      Icon(Icons.person_outline,
+                          size: 14, color: Colors.grey.shade500),
+                      const SizedBox(width: 4),
+                      Expanded(
+                        child: Text(
+                          info.uploader!,
+                          style: TextStyle(
+                              color: Colors.grey.shade600, fontSize: 13),
+                          overflow: TextOverflow.ellipsis,
+                        ),
+                      ),
+                    ],
+                    Container(
+                      padding: const EdgeInsets.symmetric(
+                          horizontal: 8, vertical: 3),
+                      decoration: BoxDecoration(
+                        color: Theme.of(context).colorScheme.secondaryContainer,
+                        borderRadius: BorderRadius.circular(10),
+                      ),
+                      child: Text(
+                        '${info.formats.length} format',
+                        style: TextStyle(
+                          fontSize: 11,
+                          fontWeight: FontWeight.w600,
+                          color: Theme.of(context).colorScheme.secondary,
+                        ),
+                      ),
+                    ),
+                  ],
                 ),
               ],
             ),
@@ -392,45 +466,239 @@ class _VideoDownloaderScreenState extends State<VideoDownloaderScreen> {
 
   Widget _buildFormatSelector() {
     final formats = _videoInfo!.formats;
-    // Separate video and audio formats
-    final videoFormats = formats
-        .where((f) => f.isVideoOnly || (f.vcodec != null && f.vcodec != 'none'))
-        .toList();
+    final videoFormats = formats.where((f) => f.isVideoOnly).toList();
+    final combinedFormats = formats.where((f) => f.hasBothCodecs).toList();
+    final audioFormats = formats.where((f) => f.isAudioOnly).toList();
 
     return Column(
       crossAxisAlignment: CrossAxisAlignment.start,
       children: [
-        const Text(
-          '📹 Pilih Format:',
-          style: TextStyle(fontWeight: FontWeight.bold, fontSize: 15),
-        ),
-        const SizedBox(height: 8),
-
         // Audio-only toggle
         SwitchListTile(
-          title: const Text('🎵 Audio Only (MP3)'),
-          subtitle: const Text('Download hanya audio dalam format MP3'),
+          title: const Text('🎵 Audio Saja'),
+          subtitle: const Text('Download hanya audio'),
           value: _audioOnly,
-          onChanged: (v) => setState(() => _audioOnly = v),
+          onChanged: (v) => setState(() {
+            _audioOnly = v;
+            _selectedFormat = null;
+          }),
           contentPadding: EdgeInsets.zero,
+          dense: true,
         ),
 
-        if (!_audioOnly && videoFormats.isNotEmpty) ...[
-          // Format list
-          ...videoFormats.map((f) {
-            final isSelected = _selectedFormat?.formatId == f.formatId;
-            return RadioListTile<VideoFormat>(
-              title: Text(f.label, style: const TextStyle(fontSize: 14)),
-              subtitle: Text(f.fileSizeKb, style: TextStyle(fontSize: 12, color: Colors.grey.shade600)),
-              value: f,
-              groupValue: _selectedFormat,
-              onChanged: (v) => setState(() => _selectedFormat = v),
-              contentPadding: EdgeInsets.zero,
-              dense: true,
-            );
-          }),
+        // ── Audio-only formats ──
+        if (_audioOnly && audioFormats.isNotEmpty)
+          _buildCollapsibleGroup(
+            title: 'Audio Formats',
+            count: audioFormats.length,
+            expanded: _audioExpanded,
+            onToggle: () => setState(() => _audioExpanded = !_audioExpanded),
+            children: audioFormats.map((f) => _buildFormatTile(f)).toList(),
+          ),
+
+        // ── Video formats ──
+        if (!_audioOnly) ...[
+          if (combinedFormats.isNotEmpty)
+            _buildCollapsibleGroup(
+              title: 'Video + Audio',
+              count: combinedFormats.length,
+              expanded: _combinedExpanded,
+              onToggle: () =>
+                  setState(() => _combinedExpanded = !_combinedExpanded),
+              children:
+                  combinedFormats.map((f) => _buildFormatTile(f)).toList(),
+            ),
+          if (videoFormats.isNotEmpty) ...[
+            _buildCollapsibleGroup(
+              title: 'Video Saja (tanpa audio)',
+              count: videoFormats.length,
+              expanded: _videoOnlyExpanded,
+              onToggle: () =>
+                  setState(() => _videoOnlyExpanded = !_videoOnlyExpanded),
+              children: [
+                // Info banner
+                Container(
+                  margin: const EdgeInsets.only(bottom: 8),
+                  padding: const EdgeInsets.all(10),
+                  decoration: BoxDecoration(
+                    color: Colors.blue.shade50,
+                    borderRadius: BorderRadius.circular(8),
+                    border: Border.all(color: Colors.blue.shade200),
+                  ),
+                  child: Row(
+                    children: [
+                      Icon(Icons.info_outline,
+                          size: 16, color: Colors.blue.shade700),
+                      const SizedBox(width: 8),
+                      Expanded(
+                        child: Text(
+                          'Video-only akan di-download lalu di-merge otomatis dengan audio terbaik',
+                          style: TextStyle(
+                              fontSize: 12, color: Colors.blue.shade700),
+                        ),
+                      ),
+                    ],
+                  ),
+                ),
+                ...videoFormats.map((f) => _buildFormatTile(f)),
+              ],
+            ),
+          ],
+          if (combinedFormats.isEmpty && videoFormats.isEmpty)
+            Padding(
+              padding: const EdgeInsets.symmetric(vertical: 16),
+              child: Text(
+                'Tidak ada format video tersedia',
+                style: TextStyle(color: Colors.grey.shade500, fontSize: 13),
+              ),
+            ),
         ],
       ],
+    );
+  }
+
+  Widget _buildCollapsibleGroup({
+    required String title,
+    required int count,
+    required bool expanded,
+    required VoidCallback onToggle,
+    required List<Widget> children,
+  }) {
+    return Padding(
+      padding: const EdgeInsets.only(bottom: 12),
+      child: Column(
+        crossAxisAlignment: CrossAxisAlignment.start,
+        children: [
+          InkWell(
+            onTap: onToggle,
+            borderRadius: BorderRadius.circular(8),
+            child: Padding(
+              padding: const EdgeInsets.symmetric(vertical: 6, horizontal: 4),
+              child: Row(
+                children: [
+                  AnimatedRotation(
+                    turns: expanded ? 0.25 : 0,
+                    duration: const Duration(milliseconds: 200),
+                    child: Icon(
+                      Icons.arrow_drop_down,
+                      size: 22,
+                      color: Colors.grey.shade700,
+                    ),
+                  ),
+                  Text(
+                    title,
+                    style: TextStyle(
+                      fontWeight: FontWeight.w600,
+                      fontSize: 13,
+                      color: Colors.grey.shade700,
+                    ),
+                  ),
+                  const SizedBox(width: 6),
+                  Container(
+                    padding:
+                        const EdgeInsets.symmetric(horizontal: 6, vertical: 2),
+                    decoration: BoxDecoration(
+                      color: Theme.of(context).colorScheme.primaryContainer,
+                      borderRadius: BorderRadius.circular(8),
+                    ),
+                    child: Text(
+                      '$count',
+                      style: TextStyle(
+                        fontSize: 11,
+                        fontWeight: FontWeight.bold,
+                        color: Theme.of(context).colorScheme.primary,
+                      ),
+                    ),
+                  ),
+                  const Spacer(),
+                  Icon(
+                    expanded ? Icons.expand_less : Icons.expand_more,
+                    size: 18,
+                    color: Colors.grey.shade500,
+                  ),
+                ],
+              ),
+            ),
+          ),
+          AnimatedCrossFade(
+            firstChild: const SizedBox.shrink(),
+            secondChild: Column(children: children),
+            crossFadeState:
+                expanded ? CrossFadeState.showSecond : CrossFadeState.showFirst,
+            duration: const Duration(milliseconds: 200),
+          ),
+        ],
+      ),
+    );
+  }
+
+  Widget _buildFormatTile(VideoFormat f) {
+    final isSelected = _selectedFormat?.formatId == f.formatId;
+    return RadioListTile<VideoFormat>(
+      value: f,
+      groupValue: _selectedFormat,
+      onChanged: (v) => setState(() => _selectedFormat = v),
+      contentPadding: EdgeInsets.zero,
+      dense: true,
+      title: Row(
+        children: [
+          // Resolution
+          Text(
+            f.label,
+            style: const TextStyle(fontSize: 14, fontWeight: FontWeight.w500),
+          ),
+          const SizedBox(width: 8),
+          // Codec badges
+          if (f.vcodecLabel.isNotEmpty)
+            _buildCodecBadge(f.vcodecLabel, Colors.blue.shade700),
+          if (f.acodecLabel.isNotEmpty) ...[
+            const SizedBox(width: 4),
+            _buildCodecBadge(f.acodecLabel, Colors.teal.shade700),
+          ],
+        ],
+      ),
+      subtitle: Row(
+        children: [
+          Text(
+            f.fileSizeKb,
+            style: TextStyle(fontSize: 12, color: Colors.grey.shade600),
+          ),
+          if (f.formatNote != null && f.formatNote!.isNotEmpty) ...[
+            const SizedBox(width: 8),
+            Text(
+              f.formatNote!,
+              style: TextStyle(fontSize: 12, color: Colors.grey.shade500),
+            ),
+          ],
+          if (f.abr != null && f.abr! > 0) ...[
+            const SizedBox(width: 8),
+            Text(
+              '${f.abr!.toStringAsFixed(0)} kbps',
+              style: TextStyle(fontSize: 12, color: Colors.grey.shade500),
+            ),
+          ],
+        ],
+      ),
+    );
+  }
+
+  Widget _buildCodecBadge(String label, Color color) {
+    return Container(
+      padding: const EdgeInsets.symmetric(horizontal: 6, vertical: 2),
+      decoration: BoxDecoration(
+        color: color.withOpacity(0.1),
+        borderRadius: BorderRadius.circular(4),
+        border: Border.all(color: color.withOpacity(0.3)),
+      ),
+      child: Text(
+        label,
+        style: TextStyle(
+          fontSize: 10,
+          fontWeight: FontWeight.bold,
+          color: color,
+          letterSpacing: 0.5,
+        ),
+      ),
     );
   }
 
@@ -475,15 +743,19 @@ class _VideoDownloaderScreenState extends State<VideoDownloaderScreen> {
   }
 
   Widget _buildDownloadButton() {
+    final isVideoOnly = _selectedFormat?.isVideoOnly ?? false;
+    final label = _audioOnly
+        ? 'Download Audio'
+        : isVideoOnly
+            ? 'Download Video + Audio (Merge)'
+            : 'Download Video';
     return SizedBox(
       width: double.infinity,
       height: 48,
       child: FilledButton.icon(
         onPressed: _startDownload,
         icon: const Icon(Icons.download),
-        label: Text(
-          _audioOnly ? '⬇ Download Audio (MP3)' : '⬇ Download Video',
-        ),
+        label: Text(label),
       ),
     );
   }

@@ -79,10 +79,20 @@ class VideoFormat {
   }
 
   bool get isVideoOnly =>
-      (vcodec != null && vcodec != 'none') && (acodec == null || acodec == 'none');
+      (vcodec != null && vcodec != 'none') &&
+      (acodec == null || acodec == 'none');
 
   bool get isAudioOnly =>
-      (acodec != null && acodec != 'none') && (vcodec == null || vcodec == 'none');
+      (acodec != null && acodec != 'none') &&
+      (vcodec == null || vcodec == 'none');
+
+  bool get hasBothCodecs =>
+      !isVideoOnly &&
+      !isAudioOnly &&
+      vcodec != null &&
+      vcodec != 'none' &&
+      acodec != null &&
+      acodec != 'none';
 
   String get fileSizeMb {
     if (filesize == null || filesize == 0) return '—';
@@ -91,8 +101,34 @@ class VideoFormat {
 
   String get fileSizeKb {
     if (filesize == null || filesize == 0) return '—';
-    if (filesize! < 1024 * 1024) return '${(filesize! / 1024).toStringAsFixed(0)} KB';
+    if (filesize! < 1024 * 1024)
+      return '${(filesize! / 1024).toStringAsFixed(0)} KB';
     return fileSizeMb;
+  }
+
+  /// Short video codec name (e.g. "AV1", "H264", "VP9")
+  String get vcodecLabel {
+    if (vcodec == null || vcodec == 'none') return '';
+    final lc = vcodec!.toLowerCase();
+    if (lc.contains('av01')) return 'AV1';
+    if (lc.contains('avc') || lc.contains('h264')) return 'H264';
+    if (lc.contains('vp9')) return 'VP9';
+    if (lc.contains('vp09')) return 'VP9';
+    if (lc.contains('hevc') || lc.contains('h265')) return 'HEVC';
+    if (lc.contains('av1')) return 'AV1';
+    return vcodec!.toUpperCase();
+  }
+
+  /// Short audio codec name (e.g. "AAC", "OPUS", "MP3")
+  String get acodecLabel {
+    if (acodec == null || acodec == 'none') return '';
+    final lc = acodec!.toLowerCase();
+    if (lc.contains('mp4a') || lc.contains('aac')) return 'AAC';
+    if (lc.contains('opus')) return 'OPUS';
+    if (lc.contains('mp3') || lc.contains('mpga')) return 'MP3';
+    if (lc.contains('vorbis')) return 'VORBIS';
+    if (lc.contains('flac')) return 'FLAC';
+    return acodec!.toUpperCase();
   }
 
   String get label {
@@ -100,7 +136,6 @@ class VideoFormat {
       if (resolution != null && resolution != 'audio only') resolution!,
       if (ext != null) ext!.toUpperCase(),
       if (fps != null && fps! > 30) '${fps}fps',
-      if (formatNote != null && formatNote!.isNotEmpty) formatNote!,
     ];
     return parts.join(' · ');
   }
