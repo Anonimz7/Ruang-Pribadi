@@ -270,7 +270,13 @@ class _BackupScreenState extends State<BackupScreen> {
               content: Column(
                 mainAxisSize: MainAxisSize.min,
                 children: [
-                  const Text('Buka link berikut dan copy authorization code:'),
+                  const Text(
+                    '1. Buka link di bawah & login Google\n'
+                    '2. Setelah grant, browser redirect ke localhost\n'
+                    '3. Copy kode dari URL (bagian ?code=XXX)\n'
+                    '4. Paste kode di bawah ini',
+                    style: TextStyle(fontSize: 12),
+                  ),
                   const SizedBox(height: 8),
                   InkWell(
                     onTap: () => launchUrl(Uri.parse(authUrl)),
@@ -279,7 +285,7 @@ class _BackupScreenState extends State<BackupScreen> {
                       style: const TextStyle(
                         color: Colors.blue,
                         decoration: TextDecoration.underline,
-                        fontSize: 12,
+                        fontSize: 11,
                       ),
                     ),
                   ),
@@ -288,6 +294,7 @@ class _BackupScreenState extends State<BackupScreen> {
                     controller: controller,
                     decoration: const InputDecoration(
                       labelText: 'Authorization Code',
+                      hintText: 'Paste code dari URL...',
                       border: OutlineInputBorder(),
                     ),
                   ),
