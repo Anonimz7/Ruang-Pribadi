@@ -1,11 +1,15 @@
 import 'dart:async';
+import 'dart:convert';
 import 'dart:io';
 import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
+import 'package:shared_preferences/shared_preferences.dart';
 import 'package:url_launcher/url_launcher.dart';
+import 'package:web_socket_channel/web_socket_channel.dart';
 import '../models/download_model.dart';
 import '../../services/apis.dart';
 import '../../services/api_client.dart';
+import '../../services/api_config.dart';
 import 'download_history_screen.dart';
 import '../../settings/admin_cookies_screen.dart';
 
@@ -33,6 +37,8 @@ class _VideoDownloaderScreenState extends State<VideoDownloaderScreen> {
   Timer? _pollTimer;
   VideoFormat? _selectedFormat;
   bool _audioOnly = false;
+  String? _downloadId;
+  WebSocketChannel? _wsChannel;
 
   // Collapsible group states — keyed by resolution string
   final Map<String, bool> _groupExpanded = {};
@@ -42,67 +48,170 @@ class _VideoDownloaderScreenState extends State<VideoDownloaderScreen> {
   @override
   void initState() {
     super.initState();
+    _restorePersistedDownload();
     _checkActiveDownloads();
   }
 
   @override
   void dispose() {
     _pollTimer?.cancel();
+    _wsChannel?.sink.close();
     _urlCtrl.dispose();
     _focusNode.dispose();
     super.dispose();
+  }
+
+  // ── Persist download state to SharedPreferences ─────────
+  static const _persistKey = 'video_downloader_active';
+
+  Future<void> _saveDownloadState(
+      String downloadId, String url, String formatId, bool audioOnly) async {
+    final prefs = await SharedPreferences.getInstance();
+    await prefs.setString(
+        _persistKey,
+        jsonEncode({
+          'download_id': downloadId,
+          'url': url,
+          'format_id': formatId,
+          'audio_only': audioOnly,
+          'started_at': DateTime.now().toIso8601String(),
+        }));
+  }
+
+  Future<void> _clearDownloadState() async {
+    final prefs = await SharedPreferences.getInstance();
+    await prefs.remove(_persistKey);
+  }
+
+  /// Restore download state on screen open — checks server for actual status.
+  Future<void> _restorePersistedDownload() async {
+    try {
+      final prefs = await SharedPreferences.getInstance();
+      final raw = prefs.getString(_persistKey);
+      if (raw == null) return;
+
+      final data = jsonDecode(raw) as Map<String, dynamic>;
+      final downloadId = data['download_id'] as String?;
+      if (downloadId == null) {
+        await _clearDownloadState();
+        return;
+      }
+
+      // Check with server what happened to this download
+      final status = await _videoApi.downloadStatus(downloadId);
+      final st = status['status'] as String? ?? 'not_found';
+
+      if (!mounted) return;
+
+      if (st == 'downloading' || st == 'interrupted') {
+        // Download still running or was interrupted — resume tracking
+        setState(() {
+          _downloading = true;
+          _downloadId = downloadId;
+          _progress = (status['progress'] ?? 0).toDouble();
+          _downloadStatus =
+              st == 'interrupted' ? 'Menyambung ulang...' : 'Mengunduh...';
+          _error = null;
+        });
+        _startStatusPolling(downloadId);
+        _connectProgressWebSocket();
+      } else if (st == 'completed') {
+        // Download finished while app was closed
+        await _clearDownloadState();
+        final fileName = status['file_name'] as String?;
+        if (mounted) {
+          setState(() {
+            _downloading = false;
+            _progress = 100;
+            _downloadStatus = 'Selesai!';
+          });
+          _showSnackBar('Download selesai: $fileName', isError: false);
+        }
+      } else if (st == 'failed') {
+        await _clearDownloadState();
+        if (mounted) {
+          setState(() {
+            _downloading = false;
+            _error = 'Download gagal: ${status['error'] ?? "Unknown error"}';
+          });
+        }
+      } else {
+        // not_found — cleaned up, remove persisted state
+        await _clearDownloadState();
+      }
+    } catch (_) {
+      // Network error — keep persisted state, will retry on next check
+    }
   }
 
   // ── Check active downloads on screen open ──────────────
   Future<void> _checkActiveDownloads() async {
     try {
       final data = await _videoApi.activeDownloads();
-      final items = data
-          .map((e) => Map<String, dynamic>.from(e as Map))
-          .toList();
+      final items =
+          data.map((e) => Map<String, dynamic>.from(e as Map)).toList();
       if (items.isNotEmpty && mounted) {
         setState(() => _activeDownloads = items);
-        _showActiveBanner(items);
       }
     } catch (_) {}
   }
 
-  void _showActiveBanner(List<Map<String, dynamic>> items) {
-    final count = items.length;
-    final label = count == 1
-        ? '1 download sedang berjalan'
-        : '$count download sedang berjalan';
-    ScaffoldMessenger.of(context).showSnackBar(
-      SnackBar(
-        content: Row(
-          children: [
-            const SizedBox(
-              width: 16,
-              height: 16,
-              child: CircularProgressIndicator(strokeWidth: 2, color: Colors.white),
-            ),
-            const SizedBox(width: 10),
-            Expanded(
-              child: Text(label, style: const TextStyle(fontWeight: FontWeight.w500)),
-            ),
-            TextButton(
-              onPressed: () {
-                ScaffoldMessenger.of(context).hideCurrentSnackBar();
-                Navigator.push(
-                  context,
-                  MaterialPageRoute(builder: (_) => const DownloadHistoryScreen()),
-                );
-              },
-              child: const Text('Lihat', style: TextStyle(color: Colors.white)),
-            ),
-          ],
-        ),
-        backgroundColor: Colors.blue.shade700,
-        behavior: SnackBarBehavior.floating,
-        shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(10)),
-        duration: const Duration(seconds: 5),
-      ),
-    );
+  // ── WebSocket for real-time download progress ──────────
+  void _connectProgressWebSocket() {
+    _wsChannel?.sink.close();
+    try {
+      final baseUrl = ApiConfig.baseUrl.replaceFirst('http', 'ws');
+      final userId = ApiClient().username;
+      final wsUrl = '$baseUrl/ws/video-progress/$userId';
+      _wsChannel = WebSocketChannel.connect(Uri.parse(wsUrl));
+
+      _wsChannel!.stream.listen(
+        (data) {
+          try {
+            final msg = jsonDecode(data as String);
+            final status = msg['status'] as String?;
+            final fn = msg['filename'] as String?;
+
+            // Only update if it matches our current download
+            if (_downloadId != null && fn != _downloadId) return;
+
+            if (status == 'downloading' && mounted) {
+              setState(() {
+                _progress = (msg['progress'] ?? 0).toDouble();
+                _downloadSpeed = msg['speed'] as String?;
+                _downloadEta = msg['eta'] as String?;
+                _downloadStatus =
+                    'Mengunduh... ${_progress.toStringAsFixed(1)}%';
+              });
+            } else if (status == 'completed' && mounted) {
+              _clearDownloadState();
+              setState(() {
+                _downloading = false;
+                _progress = 100;
+                _downloadStatus = 'Selesai!';
+                _downloadId = null;
+                _downloadSpeed = null;
+                _downloadEta = null;
+              });
+              _stopPolling();
+              _showSnackBar('Download selesai!', isError: false);
+            } else if (status == 'error' && mounted) {
+              _clearDownloadState();
+              setState(() {
+                _downloading = false;
+                _error = 'Download gagal: ${msg["message"] ?? "Unknown"}';
+                _downloadId = null;
+                _downloadSpeed = null;
+                _downloadEta = null;
+              });
+              _stopPolling();
+            }
+          } catch (_) {}
+        },
+        onDone: () {},
+        onError: (_) {},
+      );
+    } catch (_) {}
   }
 
   // ── Extract ─────────────────────────────────────────────
@@ -166,6 +275,8 @@ class _VideoDownloaderScreenState extends State<VideoDownloaderScreen> {
   Future<void> _startDownload() async {
     if (_selectedFormat == null && !_audioOnly) return;
     final url = _urlCtrl.text.trim();
+    final formatId =
+        _audioOnly ? 'bestaudio' : (_selectedFormat?.formatId ?? 'best');
 
     setState(() {
       _downloading = true;
@@ -176,26 +287,25 @@ class _VideoDownloaderScreenState extends State<VideoDownloaderScreen> {
       _error = null;
     });
 
-    // Start polling for progress (works through Cloudflare proxies)
-    _startPolling();
+    // Connect WebSocket for real-time progress
+    _connectProgressWebSocket();
 
     try {
-      final result = await _videoApi.download(
-        url,
-        _audioOnly ? 'bestaudio' : (_selectedFormat?.formatId ?? 'best'),
-        audioOnly: _audioOnly,
-      );
-      // Download succeeded
-      _stopPolling();
+      final result =
+          await _videoApi.download(url, formatId, audioOnly: _audioOnly);
       final data = (result['data'] ?? result) as Map<String, dynamic>;
-      setState(() {
-        _downloading = false;
-        _progress = 100;
-        _downloadStatus = 'Selesai!';
-        _downloadSpeed = null;
-        _downloadEta = null;
-      });
-      _showSnackBar('Download selesai!', isError: false);
+      final downloadId = data['download_id'] as String?;
+
+      if (downloadId != null) {
+        // Save state to SharedPreferences so it survives app kill
+        _downloadId = downloadId;
+        await _saveDownloadState(downloadId, url, formatId, _audioOnly);
+        // Start polling status endpoint as fallback
+        _startStatusPolling(downloadId);
+      }
+
+      // The endpoint returns immediately now — the download runs in background.
+      // Progress comes via WebSocket or polling.
     } catch (e) {
       _stopPolling();
       final errMsg =
@@ -205,33 +315,59 @@ class _VideoDownloaderScreenState extends State<VideoDownloaderScreen> {
         _error = errMsg;
         _downloadSpeed = null;
         _downloadEta = null;
+        _downloadId = null;
       });
+      await _clearDownloadState();
       _showSnackBar(errMsg, isError: true);
     }
   }
 
-  // ── HTTP Polling for progress ───────────────────────────
-  void _startPolling() {
+  // ── Poll download status by ID (fallback when WS fails) ──
+  void _startStatusPolling(String downloadId) {
     _pollTimer?.cancel();
-    _pollTimer = Timer.periodic(const Duration(seconds: 1), (_) async {
-      if (!_downloading) {
+    _pollTimer = Timer.periodic(const Duration(seconds: 2), (_) async {
+      if (!_downloading || _downloadId == null) {
         _stopPolling();
         return;
       }
       try {
-        final active = await _videoApi.activeDownloads();
-        if (active.isEmpty) return;
-        // Pick the most recent download (first in list)
-        final dl = active.first as Map<String, dynamic>;
-        final pct = (dl['progress'] ?? 0).toDouble();
-        final speed = dl['speed'] as String?;
-        final eta = dl['eta'] as String?;
-        if (mounted && _downloading) {
+        final status = await _videoApi.downloadStatus(_downloadId!);
+        final st = status['status'] as String? ?? 'not_found';
+        final pct = (status['progress'] ?? 0).toDouble();
+        final speed = status['speed'] as String?;
+        final eta = status['eta'] as String?;
+
+        if (!mounted) return;
+
+        if (st == 'downloading' || st == 'interrupted') {
           setState(() {
             _progress = pct;
             _downloadSpeed = speed;
             _downloadEta = eta;
             _downloadStatus = 'Mengunduh... ${pct.toStringAsFixed(1)}%';
+          });
+        } else if (st == 'completed') {
+          _stopPolling();
+          await _clearDownloadState();
+          final fileName = status['file_name'] as String?;
+          setState(() {
+            _downloading = false;
+            _progress = 100;
+            _downloadStatus = 'Selesai!';
+            _downloadId = null;
+            _downloadSpeed = null;
+            _downloadEta = null;
+          });
+          _showSnackBar('Download selesai: $fileName', isError: false);
+        } else if (st == 'failed') {
+          _stopPolling();
+          await _clearDownloadState();
+          setState(() {
+            _downloading = false;
+            _error = 'Download gagal: ${status["error"] ?? "Unknown error"}';
+            _downloadId = null;
+            _downloadSpeed = null;
+            _downloadEta = null;
           });
         }
       } catch (_) {}
@@ -324,6 +460,12 @@ class _VideoDownloaderScreenState extends State<VideoDownloaderScreen> {
           // ── URL Input ──
           _buildUrlInput(),
           const SizedBox(height: 16),
+
+          // ── Active downloads (persistent card, replaces SnackBar) ──
+          if (_activeDownloads.isNotEmpty) ...[
+            _buildActiveDownloadsCard(),
+            const SizedBox(height: 12),
+          ],
 
           // ── Error ──
           if (_error != null) _buildError(),
@@ -907,6 +1049,115 @@ class _VideoDownloaderScreenState extends State<VideoDownloaderScreen> {
         icon: const Icon(Icons.download),
         label: Text(label),
       ),
+    );
+  }
+
+  // ── Persistent Active Downloads Card ──────────────────────
+  Widget _buildActiveDownloadsCard() {
+    return Card(
+      color: Colors.blue.shade50,
+      child: Padding(
+        padding: const EdgeInsets.all(12),
+        child: Column(
+          crossAxisAlignment: CrossAxisAlignment.start,
+          children: [
+            Row(
+              children: [
+                const SizedBox(
+                  width: 16,
+                  height: 16,
+                  child: CircularProgressIndicator(strokeWidth: 2),
+                ),
+                const SizedBox(width: 10),
+                Expanded(
+                  child: Text(
+                    _activeDownloads.length == 1
+                        ? '1 download sedang berjalan'
+                        : '${_activeDownloads.length} download sedang berjalan',
+                    style: const TextStyle(
+                        fontWeight: FontWeight.w600, fontSize: 13),
+                  ),
+                ),
+                TextButton(
+                  onPressed: () {
+                    Navigator.push(
+                      context,
+                      MaterialPageRoute(
+                          builder: (_) => const DownloadHistoryScreen()),
+                    );
+                  },
+                  child: const Text('Lihat Riwayat'),
+                ),
+              ],
+            ),
+            for (final dl in _activeDownloads) ...[
+              const Divider(height: 16),
+              _buildActiveDownloadItem(dl),
+            ],
+          ],
+        ),
+      ),
+    );
+  }
+
+  Widget _buildActiveDownloadItem(Map<String, dynamic> dl) {
+    final fn = dl['filename'] as String? ?? '...';
+    final pct = (dl['progress'] ?? 0).toDouble();
+    final speed = dl['speed'] as String?;
+    final eta = dl['eta'] as String?;
+    final status = dl['status'] as String? ?? 'downloading';
+
+    return Column(
+      crossAxisAlignment: CrossAxisAlignment.start,
+      children: [
+        Row(
+          children: [
+            Icon(
+              status == 'interrupted' ? Icons.sync : Icons.downloading,
+              size: 16,
+              color: status == 'interrupted' ? Colors.orange : Colors.blue,
+            ),
+            const SizedBox(width: 6),
+            Expanded(
+              child: Text(
+                fn,
+                style:
+                    const TextStyle(fontSize: 12, fontWeight: FontWeight.w500),
+                overflow: TextOverflow.ellipsis,
+              ),
+            ),
+            Text(
+              '${pct.toStringAsFixed(1)}%',
+              style: const TextStyle(fontSize: 12, fontWeight: FontWeight.w600),
+            ),
+          ],
+        ),
+        const SizedBox(height: 4),
+        LinearProgressIndicator(
+          value: pct / 100,
+          minHeight: 4,
+          borderRadius: BorderRadius.circular(2),
+        ),
+        if (speed != null || eta != null) ...[
+          const SizedBox(height: 2),
+          Row(
+            children: [
+              if (speed != null)
+                Text(speed,
+                    style:
+                        TextStyle(fontSize: 10, color: Colors.grey.shade600)),
+              if (speed != null && eta != null)
+                Text(' · ',
+                    style:
+                        TextStyle(fontSize: 10, color: Colors.grey.shade400)),
+              if (eta != null)
+                Text('Sisa $eta',
+                    style:
+                        TextStyle(fontSize: 10, color: Colors.grey.shade500)),
+            ],
+          ),
+        ],
+      ],
     );
   }
 }

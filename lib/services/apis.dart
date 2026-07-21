@@ -294,8 +294,7 @@ class AdminApi {
 
   /// [GET /admin/users/{id}/visibility] — Get hidden menus
   Future<Map<String, dynamic>> getVisibility(int userId) async =>
-      (await _c.get('/admin/users/$userId/visibility'))
-          as Map<String, dynamic>;
+      (await _c.get('/admin/users/$userId/visibility')) as Map<String, dynamic>;
 
   /// [PUT /admin/users/{id}/visibility] — Set hidden menus (replace)
   Future<Map<String, dynamic>> setVisibility(
@@ -439,7 +438,8 @@ class UpdateApi {
     String changelog = '',
   }) async {
     final t = await _c.token;
-    final uri = Uri.parse('${ApiConfig.baseUrl}${ApiConfig.prefix}/admin/update/upload');
+    final uri = Uri.parse(
+        '${ApiConfig.baseUrl}${ApiConfig.prefix}/admin/update/upload');
     final request = http.MultipartRequest('POST', uri);
     if (t != null) request.headers['Authorization'] = 'Bearer $t';
     request.files.add(await http.MultipartFile.fromPath('file', filePath));
@@ -467,11 +467,11 @@ class UpdateApi {
 
   /// [DELETE /admin/update/{id}] — Delete version
   Future<Map<String, dynamic>> deleteVersion(int versionId) async =>
-      (await _c.delete('/admin/update/$versionId'))
-          as Map<String, dynamic>;
+      (await _c.delete('/admin/update/$versionId')) as Map<String, dynamic>;
 
   /// [PUT /admin/update/{id}] — Update changelog
-  Future<Map<String, dynamic>> updateChangelog(int versionId, String changelog) async =>
+  Future<Map<String, dynamic>> updateChangelog(
+          int versionId, String changelog) async =>
       (await _c.put('/admin/update/$versionId', {'changelog': changelog}))
           as Map<String, dynamic>;
 }
@@ -483,7 +483,8 @@ class VideoApi {
 
   /// [POST /video/extract] — Extract video info from URL
   Future<Map<String, dynamic>> extract(String url) async {
-    return (await _c.post('/video/extract', {'url': url})) as Map<String, dynamic>;
+    return (await _c.post('/video/extract', {'url': url}))
+        as Map<String, dynamic>;
   }
 
   /// [POST /video/download] — Start download in background
@@ -496,9 +497,12 @@ class VideoApi {
     })) as Map<String, dynamic>;
   }
 
-  /// [GET /video/status/{id}] — Get download status
-  Future<Map<String, dynamic>> status(int id) async {
-    return (await _c.get('/video/status/$id')) as Map<String, dynamic>;
+  /// [GET /video/status/{download_id}] — Get download status by filename/id
+  Future<Map<String, dynamic>> downloadStatus(String downloadId) async {
+    final r = await _c.get('/video/status/$downloadId');
+    if (r is Map && r['data'] is Map)
+      return Map<String, dynamic>.from(r['data']);
+    return r is Map ? Map<String, dynamic>.from(r) : {};
   }
 
   /// [GET /video/history] — Get download history
@@ -531,7 +535,8 @@ class VideoApi {
   /// [POST /admin/update/cookies] — Upload cookies.txt (admin only)
   Future<Map<String, dynamic>> uploadCookies(String filePath) async {
     final t = await _c.token;
-    final uri = Uri.parse('${ApiConfig.baseUrl}${ApiConfig.prefix}/admin/update/cookies');
+    final uri = Uri.parse(
+        '${ApiConfig.baseUrl}${ApiConfig.prefix}/admin/update/cookies');
     final request = http.MultipartRequest('POST', uri);
     if (t != null) request.headers['Authorization'] = 'Bearer $t';
     request.files.add(await http.MultipartFile.fromPath('file', filePath));
