@@ -51,11 +51,20 @@ class _StocksScreenState extends State<StocksScreen> {
     } catch (_) {}
   }
 
+  void _resetCompare() {
+    _compareMode = false;
+    _compareTickers.clear();
+    _compareData.clear();
+  }
+
   Future<void> _load(String ticker) async {
+    final t = ticker.toUpperCase();
+    final isSameTicker = _analysis != null && _analysis!['ticker'] == t;
     setState(() {
       _loading = true;
       _results = [];
-      _searchCtrl.text = ticker;
+      _searchCtrl.text = t;
+      if (!isSameTicker) _resetCompare();
     });
     try {
       final d = await _api.analysis(ticker, days: _days);
