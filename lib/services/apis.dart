@@ -522,13 +522,15 @@ class VideoApi {
 
   /// [DELETE /video/{file_name}] — Delete a downloaded video
   Future<Map<String, dynamic>> deleteVideo(String fileName) async {
-    return (await _c.delete('/video/$fileName')) as Map<String, dynamic>;
+    final encodedName = Uri.encodeComponent(fileName);
+    return (await _c.delete('/video/$encodedName')) as Map<String, dynamic>;
   }
 
   /// Get stream URL for playing a downloaded video
   String streamUrl(String fileName) {
     final userId = ApiClient().username;
-    return '${ApiConfig.baseUrl}${ApiConfig.prefix}/video/download-file/$userId/$fileName';
+    final encodedName = Uri.encodeComponent(fileName);
+    return '${ApiConfig.baseUrl}${ApiConfig.prefix}/video/download-file/$userId/$encodedName';
   }
 
   // ── Admin: Cookies Management ──
