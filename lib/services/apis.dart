@@ -391,6 +391,12 @@ class BackupApi {
   Future<Map<String, dynamic>> deleteBackup(String filename) async =>
       (await _c.delete('/admin/backup/$filename')) as Map<String, dynamic>;
 
+  /// Build full download URL with auth token for browser-based download
+  Future<String> getDownloadUrl(String filename) async {
+    final t = await _c.token;
+    return '${ApiConfig.baseUrl}${ApiConfig.prefix}/admin/backup/download/$filename?token=$t';
+  }
+
   /// Download backup file to local storage.
   Future<String> downloadBackup(String remotePath, String localFilename) async {
     final t = await _c.token;

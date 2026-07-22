@@ -1,7 +1,5 @@
 import 'dart:async';
-import 'dart:io';
 import 'package:flutter/material.dart';
-import 'package:flutter/services.dart';
 import 'package:url_launcher/url_launcher.dart';
 import '../services/apis.dart';
 
@@ -174,41 +172,15 @@ class _BackupScreenState extends State<BackupScreen> {
 
   Future<void> _downloadBackup(String filename) async {
     try {
-      ScaffoldMessenger.of(context).showSnackBar(
-        const SnackBar(content: Text('⬇️ Mengunduh...')),
-      );
-      final path = await _api.downloadBackup(filename, filename);
-
-      if (!mounted) return;
-
-      final action = await showDialog<String>(
-        context: context,
-        builder: (ctx) => AlertDialog(
-          title: const Text('✅ Unduhan Selesai'),
-          content: Text('File tersimpan di:\n$path'),
-          actions: [
-            TextButton(
-              onPressed: () => Navigator.pop(ctx, 'close'),
-              child: const Text('Tutup'),
-            ),
-            TextButton(
-              onPressed: () => Navigator.pop(ctx, 'open'),
-              child: const Text('Buka File', style: TextStyle(color: Color(0xFF00C87A))),
-            ),
-          ],
-        ),
-      );
-
-      if (action == 'open') {
-        if (Platform.isWindows || Platform.isMacOS || Platform.isLinux) {
-          await Process.run('explorer', ['/select,', path]);
-        } else {
-          await Clipboard.setData(ClipboardData(text: path));
-          if (mounted) {
-            ScaffoldMessenger.of(context).showSnackBar(
-              const SnackBar(content: Text('📋 Path disalin ke clipboard')),
-            );
-          }
+      final url = await _api.getDownloadUrl(filename);
+      final uri = Uri.parse(url);
+      if (await canLaunchUrl(uri)) {
+        await launchUrl(uri, mode: LaunchMode.externalApplication);
+      } else {
+        if (mounted) {
+          ScaffoldMessenger.of(context).showSnackBar(
+            const SnackBar(content: Text('Tidak bisa membuka browser')),
+          );
         }
       }
     } catch (e) {

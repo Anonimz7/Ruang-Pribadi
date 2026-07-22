@@ -5,6 +5,6 @@
 ///   1.1.0 → 2
 ///   2.0.0 → 3
 class AppVersion {
-  static const int code = 3;
-  static const String name = '1.2.0'; ///fix update apk
+  static const int code = 4;
+  static const String name = '1.3.0'; ///fix backup
 }
