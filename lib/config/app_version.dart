@@ -5,6 +5,6 @@
 ///   1.1.0 → 2
 ///   2.0.0 → 3
 class AppVersion {
-  static const int code = 2;
-  static const String name = '1.1.0'; ///fix bug name video yang acak
+  static const int code = 3;
+  static const String name = '1.2.0'; ///fix update apk
 }
