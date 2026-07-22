@@ -2,9 +2,7 @@ import 'dart:io';
 import 'package:flutter/material.dart';
 import 'package:file_picker/file_picker.dart';
 import '../services/apis.dart';
-import '../services/update_service.dart';
 import '../config/app_version.dart';
-import 'package:path/path.dart' as p;
 
 class AdminUpdateScreen extends StatefulWidget {
   const AdminUpdateScreen({super.key});
@@ -19,6 +17,7 @@ class _AdminUpdateScreenState extends State<AdminUpdateScreen> {
   bool _loading = true;
   bool _uploading = false;
   double _uploadProgress = 0;
+  String _uploadStatus = '';
 
   @override
   void initState() {
@@ -120,9 +119,11 @@ class _AdminUpdateScreenState extends State<AdminUpdateScreen> {
     );
 
     if (confirmed == true && pickedFile != null) {
+      final fileSizeMb = (pickedFile!.size / 1024 / 1024).toStringAsFixed(1);
       setState(() {
         _uploading = true;
         _uploadProgress = 0;
+        _uploadStatus = 'Menyiapkan file...';
       });
       try {
         await _api.uploadApk(
@@ -130,6 +131,14 @@ class _AdminUpdateScreenState extends State<AdminUpdateScreen> {
           versionName: versionCtrl.text.trim(),
           versionCode: int.tryParse(versionCodeCtrl.text.trim()) ?? 0,
           changelog: changelogCtrl.text.trim(),
+          onProgress: (p) {
+            if (mounted) {
+              setState(() {
+                _uploadProgress = p;
+                _uploadStatus = 'Mengupload... ${(p * 100).toStringAsFixed(0)}%  ($fileSizeMb MB)';
+              });
+            }
+          },
         );
         if (mounted) {
           ScaffoldMessenger.of(context).showSnackBar(
@@ -142,7 +151,7 @@ class _AdminUpdateScreenState extends State<AdminUpdateScreen> {
               .showSnackBar(SnackBar(content: Text('$e')));
         }
       } finally {
-        setState(() => _uploading = false);
+        if (mounted) setState(() => _uploading = false);
       }
     }
   }
@@ -211,9 +220,59 @@ class _AdminUpdateScreenState extends State<AdminUpdateScreen> {
           ),
         ],
       ),
-      body: _loading
-          ? const Center(child: CircularProgressIndicator())
-          : RefreshIndicator(
+      body: Column(
+        children: [
+          // Upload progress bar
+          if (_uploading)
+            Container(
+              width: double.infinity,
+              padding: const EdgeInsets.fromLTRB(16, 12, 16, 8),
+              color: const Color(0xFF00C87A).withValues(alpha: 0.08),
+              child: Column(
+                crossAxisAlignment: CrossAxisAlignment.start,
+                children: [
+                  Row(
+                    children: [
+                      const SizedBox(
+                        width: 16,
+                        height: 16,
+                        child: CircularProgressIndicator(strokeWidth: 2),
+                      ),
+                      const SizedBox(width: 10),
+                      Expanded(
+                        child: Text(
+                          _uploadStatus,
+                          style: const TextStyle(fontSize: 13, fontWeight: FontWeight.w500),
+                        ),
+                      ),
+                      Text(
+                        '${(_uploadProgress * 100).toStringAsFixed(0)}%',
+                        style: const TextStyle(
+                          fontSize: 13,
+                          fontWeight: FontWeight.bold,
+                          color: Color(0xFF00C87A),
+                        ),
+                      ),
+                    ],
+                  ),
+                  const SizedBox(height: 8),
+                  ClipRRect(
+                    borderRadius: BorderRadius.circular(4),
+                    child: LinearProgressIndicator(
+                      value: _uploadProgress > 0 ? _uploadProgress : null,
+                      minHeight: 6,
+                      backgroundColor: Colors.grey.withValues(alpha: 0.2),
+                      valueColor: const AlwaysStoppedAnimation(Color(0xFF00C87A)),
+                    ),
+                  ),
+                ],
+              ),
+            ),
+          // Main content
+          Expanded(
+            child: _loading
+                ? const Center(child: CircularProgressIndicator())
+                : RefreshIndicator(
               onRefresh: _load,
               child: ListView(
                 padding: const EdgeInsets.all(12),
@@ -254,6 +313,9 @@ class _AdminUpdateScreenState extends State<AdminUpdateScreen> {
                 ],
               ),
             ),
+          ),
+        ],
+      ),
     );
   }
 

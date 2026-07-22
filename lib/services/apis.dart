@@ -430,28 +430,66 @@ class BackupApi {
 class UpdateApi {
   final _c = ApiClient();
 
-  /// [POST /admin/update/upload] — Upload APK
+  /// [POST /admin/update/upload] — Upload APK with progress callback
   Future<Map<String, dynamic>> uploadApk({
     required String filePath,
     required String versionName,
     required int versionCode,
     String changelog = '',
+    Function(double progress)? onProgress,
   }) async {
     final t = await _c.token;
     final uri = Uri.parse(
         '${ApiConfig.baseUrl}${ApiConfig.prefix}/admin/update/upload');
+
+    final file = File(filePath);
+    final fileBytes = await file.readAsBytes();
+    final totalBytes = fileBytes.length;
+
+    // Wrap bytes in a stream that reports progress
+    late Stream<List<int>> byteStream;
+    if (onProgress != null && totalBytes > 0) {
+      byteStream = _progressStream(fileBytes, totalBytes, onProgress);
+    } else {
+      byteStream = Stream.value(fileBytes);
+    }
+
+    final multipartFile = http.MultipartFile(
+      'file',
+      byteStream,
+      totalBytes,
+      filename: filePath.split(Platform.pathSeparator).last,
+    );
+
     final request = http.MultipartRequest('POST', uri);
     if (t != null) request.headers['Authorization'] = 'Bearer $t';
-    request.files.add(await http.MultipartFile.fromPath('file', filePath));
+    request.files.add(multipartFile);
     request.fields['version_name'] = versionName;
     request.fields['version_code'] = '$versionCode';
     request.fields['changelog'] = changelog;
-    final streamed = await request.send().timeout(const Duration(seconds: 120));
+
+    final streamed = await request.send().timeout(const Duration(seconds: 300));
     final response = await http.Response.fromStream(streamed);
     if (response.statusCode >= 200 && response.statusCode < 300) {
       return jsonDecode(response.body);
     }
     throw Exception(jsonDecode(response.body)['detail'] ?? 'Upload failed');
+  }
+
+  /// Yields file bytes in chunks while reporting progress
+  Stream<List<int>> _progressStream(
+    List<int> bytes,
+    int total,
+    Function(double) onProgress,
+  ) async* {
+    const chunkSize = 256 * 1024; // 256 KB chunks
+    int offset = 0;
+    while (offset < bytes.length) {
+      final end = (offset + chunkSize).clamp(0, bytes.length);
+      yield bytes.sublist(offset, end);
+      offset = end;
+      onProgress(offset / total);
+    }
   }
 
   /// [GET /admin/update/versions] — List all versions

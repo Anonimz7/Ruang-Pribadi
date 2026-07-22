@@ -1,8 +1,5 @@
 import 'dart:convert';
-import 'dart:io';
 import 'package:http/http.dart' as http;
-import 'package:path_provider/path_provider.dart';
-import 'package:url_launcher/url_launcher.dart';
 import '../services/api_config.dart';
 import '../config/app_version.dart';
 
@@ -55,47 +52,10 @@ class UpdateService {
     return null;
   }
 
-  /// Download APK to temp directory with progress callback
-  Future<String> downloadApk(
-    String downloadUrl, {
-    Function(double progress)? onProgress,
-  }) async {
-    final fullUrl = '${ApiConfig.baseUrl}${ApiConfig.prefix}$downloadUrl';
-    final uri = Uri.parse(fullUrl);
-
-    final client = http.Client();
-    final request = http.Request('GET', uri);
-    final streamedResponse = await client.send(request);
-    final contentLength = streamedResponse.contentLength ?? 0;
-
-    final tempDir = await getTemporaryDirectory();
-    final filePath = '${tempDir.path}/update.apk';
-    final file = File(filePath);
-    final sink = file.openWrite();
-
-    int received = 0;
-    await for (final chunk in streamedResponse.stream) {
-      sink.add(chunk);
-      received += chunk.length;
-      if (contentLength > 0 && onProgress != null) {
-        onProgress(received / contentLength);
-      }
-    }
-    await sink.close();
-    client.close();
-
-    return filePath;
-  }
-
-  /// Open APK file for installation
-  Future<void> installApk(String apkPath) async {
-    final file = File(apkPath);
-    if (!await file.exists()) return;
-
-    final uri = Uri.file(apkPath);
-    if (await canLaunchUrl(uri)) {
-      await launchUrl(uri, mode: LaunchMode.externalApplication);
-    }
+  /// Build the full download URL for a given relative path
+  String getDownloadUrl(String downloadUrl) {
+    if (downloadUrl.startsWith('http')) return downloadUrl;
+    return '${ApiConfig.baseUrl}${ApiConfig.prefix}$downloadUrl';
   }
 
   /// Get update info from login response (owner only)
