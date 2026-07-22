@@ -489,11 +489,12 @@ class VideoApi {
 
   /// [POST /video/download] — Start download in background
   Future<Map<String, dynamic>> download(String url, String formatId,
-      {bool audioOnly = false}) async {
+      {bool audioOnly = false, String? title}) async {
     return (await _c.post('/video/download', {
       'url': url,
       'format_id': formatId,
       'audio_only': audioOnly,
+      if (title != null) 'title': title,
     })) as Map<String, dynamic>;
   }
 

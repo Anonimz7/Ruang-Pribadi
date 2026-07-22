@@ -291,8 +291,8 @@ class _VideoDownloaderScreenState extends State<VideoDownloaderScreen> {
     _connectProgressWebSocket();
 
     try {
-      final result =
-          await _videoApi.download(url, formatId, audioOnly: _audioOnly);
+      final result = await _videoApi.download(url, formatId,
+          audioOnly: _audioOnly, title: _videoInfo?.title);
       final data = (result['data'] ?? result) as Map<String, dynamic>;
       final downloadId = data['download_id'] as String?;
 
