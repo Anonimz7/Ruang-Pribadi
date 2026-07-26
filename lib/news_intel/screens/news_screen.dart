@@ -429,6 +429,8 @@ class _NewsScreenState extends State<NewsScreen> {
       'ft': Colors.pink,
       'kontan': Colors.green,
       'cna': Colors.teal,
+      'rt': Colors.red,
+      'people': Colors.indigo,
     };
     return m[d] ?? Colors.grey;
   }
