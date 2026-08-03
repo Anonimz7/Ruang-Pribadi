@@ -4,6 +4,7 @@ import '../math_speed/math.dart';
 import '../passwrod_generator/pasgen.dart';
 import '../news_intel/screens/news_screen.dart';
 import '../news_intel/screens/stocks_screen.dart';
+import '../news_intel/screens/stock_list_screen.dart';
 import '../news_intel/screens/market_screen.dart';
 import '../news_intel/screens/idx_upload_screen.dart';
 import '../settings/admin_perm_screen.dart';
@@ -103,6 +104,13 @@ final List<AppDef> appRegistry = [
     icon: Icons.candlestick_chart,
     label: 'Saham IDX',
     builder: (_) => const StocksScreen(),
+    section: 'market',
+  ),
+  AppDef(
+    key: 'stock_list',
+    icon: Icons.list_alt,
+    label: 'Browse Saham',
+    builder: (_) => const StockListScreen(),
     section: 'market',
   ),
   AppDef(

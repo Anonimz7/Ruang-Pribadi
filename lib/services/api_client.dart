@@ -1,14 +1,27 @@
 import 'dart:async';
 import 'dart:convert';
 import 'dart:io';
+import 'dart:ui';
 import 'package:http/http.dart' as http;
 import 'package:flutter_secure_storage/flutter_secure_storage.dart';
 import 'api_config.dart';
+
+/// Thrown when the server returns 401 (token expired / invalid).
+class SessionExpiredException implements Exception {
+  final String message;
+  const SessionExpiredException([this.message = 'Sesi login telah berakhir']);
+  @override
+  String toString() => message;
+}
 
 class ApiClient {
   static final ApiClient _i = ApiClient._();
   factory ApiClient() => _i;
   ApiClient._();
+
+  /// Called when a 401 is received. Set from the app layer to trigger
+  /// a popup + automatic logout.
+  VoidCallback? onSessionExpired;
 
   final _storage = const FlutterSecureStorage();
   String? _token;
@@ -39,7 +52,10 @@ class ApiClient {
 
   Future<Map<String, String>> get _headers async {
     final t = await token;
-    return {'Content-Type': 'application/json', if (t != null) 'Authorization': 'Bearer $t'};
+    return {
+      'Content-Type': 'application/json',
+      if (t != null) 'Authorization': 'Bearer $t'
+    };
   }
 
   Future<void> saveSession(String t, Map<String, dynamic> user) async {
@@ -75,9 +91,12 @@ class ApiClient {
   }
 
   Future<dynamic> get(String path, [Map<String, String>? params]) async {
-    final uri = Uri.parse('${ApiConfig.baseUrl}${ApiConfig.prefix}$path').replace(queryParameters: params);
+    final uri = Uri.parse('${ApiConfig.baseUrl}${ApiConfig.prefix}$path')
+        .replace(queryParameters: params);
     try {
-      final r = await http.get(uri, headers: await _headers).timeout(const Duration(seconds: 30));
+      final r = await http
+          .get(uri, headers: await _headers)
+          .timeout(const Duration(seconds: 30));
       return _handle(r);
     } on SocketException {
       throw Exception('Tidak dapat terhubung ke server. Cek koneksi internet.');
@@ -89,7 +108,9 @@ class ApiClient {
   Future<dynamic> post(String path, Map<String, dynamic> body) async {
     final uri = Uri.parse('${ApiConfig.baseUrl}${ApiConfig.prefix}$path');
     try {
-      final r = await http.post(uri, headers: await _headers, body: jsonEncode(body)).timeout(const Duration(seconds: 30));
+      final r = await http
+          .post(uri, headers: await _headers, body: jsonEncode(body))
+          .timeout(const Duration(seconds: 30));
       return _handle(r);
     } on SocketException {
       throw Exception('Tidak dapat terhubung ke server. Cek koneksi internet.');
@@ -101,7 +122,9 @@ class ApiClient {
   Future<dynamic> put(String path, Map<String, dynamic> body) async {
     final uri = Uri.parse('${ApiConfig.baseUrl}${ApiConfig.prefix}$path');
     try {
-      final r = await http.put(uri, headers: await _headers, body: jsonEncode(body)).timeout(const Duration(seconds: 30));
+      final r = await http
+          .put(uri, headers: await _headers, body: jsonEncode(body))
+          .timeout(const Duration(seconds: 30));
       return _handle(r);
     } on SocketException {
       throw Exception('Tidak dapat terhubung ke server. Cek koneksi internet.');
@@ -113,7 +136,9 @@ class ApiClient {
   Future<dynamic> delete(String path) async {
     final uri = Uri.parse('${ApiConfig.baseUrl}${ApiConfig.prefix}$path');
     try {
-      final r = await http.delete(uri, headers: await _headers).timeout(const Duration(seconds: 30));
+      final r = await http
+          .delete(uri, headers: await _headers)
+          .timeout(const Duration(seconds: 30));
       return _handle(r);
     } on SocketException {
       throw Exception('Tidak dapat terhubung ke server. Cek koneksi internet.');
@@ -122,7 +147,8 @@ class ApiClient {
     }
   }
 
-  Future<dynamic> multipartPost(String path, String filePath, {String fieldName = 'file', Map<String, String>? extraFields}) async {
+  Future<dynamic> multipartPost(String path, String filePath,
+      {String fieldName = 'file', Map<String, String>? extraFields}) async {
     final uri = Uri.parse('${ApiConfig.baseUrl}${ApiConfig.prefix}$path');
     try {
       final t = await token;
@@ -130,7 +156,8 @@ class ApiClient {
       if (t != null) request.headers['Authorization'] = 'Bearer $t';
       request.files.add(await http.MultipartFile.fromPath(fieldName, filePath));
       if (extraFields != null) request.fields.addAll(extraFields);
-      final streamed = await request.send().timeout(const Duration(seconds: 60));
+      final streamed =
+          await request.send().timeout(const Duration(seconds: 60));
       final response = await http.Response.fromStream(streamed);
       return _handle(response);
     } on SocketException {
@@ -143,6 +170,15 @@ class ApiClient {
   dynamic _handle(http.Response r) {
     final body = jsonDecode(r.body);
     if (r.statusCode >= 200 && r.statusCode < 300) return body;
+    // ── 401 Unauthorized → session expired ──
+    if (r.statusCode == 401) {
+      // Fire the callback (auto-logout + popup) on the next frame so
+      // we don't break the current HTTP call stack.
+      if (onSessionExpired != null) {
+        Future.microtask(() => onSessionExpired!());
+      }
+      throw const SessionExpiredException();
+    }
     throw Exception(body['detail'] ?? 'Error ${r.statusCode}');
   }
 }

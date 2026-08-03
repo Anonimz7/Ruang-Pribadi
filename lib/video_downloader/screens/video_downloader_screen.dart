@@ -39,26 +39,100 @@ class _VideoDownloaderScreenState extends State<VideoDownloaderScreen> {
   bool _audioOnly = false;
   String? _downloadId;
   WebSocketChannel? _wsChannel;
+  Timer? _activePollTimer;
 
   // Collapsible group states — keyed by resolution string
   final Map<String, bool> _groupExpanded = {};
   bool _audioExpanded = true;
   List<Map<String, dynamic>> _activeDownloads = [];
 
+  // ── Poll active downloads every 3s so the card stays live ──
+  void _startActiveDownloadsPolling() {
+    _activePollTimer?.cancel();
+    _activePollTimer = Timer.periodic(
+      const Duration(seconds: 3),
+      (_) => _checkActiveDownloads(),
+    );
+  }
+
   @override
   void initState() {
     super.initState();
     _restorePersistedDownload();
     _checkActiveDownloads();
+    _startActiveDownloadsPolling();
   }
 
   @override
   void dispose() {
     _pollTimer?.cancel();
+    _activePollTimer?.cancel();
     _wsChannel?.sink.close();
     _urlCtrl.dispose();
     _focusNode.dispose();
     super.dispose();
+  }
+
+  // ── Cancel an active download ──────────────────────────
+  Future<void> _cancelDownload(String downloadId) async {
+    final confirm = await showDialog<bool>(
+      context: context,
+      builder: (ctx) => AlertDialog(
+        title: const Text('Batalkan Download?'),
+        content: const Text('File temp/fragment akan dibersihkan.'),
+        actions: [
+          TextButton(
+            onPressed: () => Navigator.pop(ctx, false),
+            child: const Text('Batal'),
+          ),
+          TextButton(
+            onPressed: () => Navigator.pop(ctx, true),
+            child:
+                const Text('Ya, Batalkan', style: TextStyle(color: Colors.red)),
+          ),
+        ],
+      ),
+    );
+    if (confirm != true) return;
+    try {
+      await _videoApi.cancelDownload(downloadId);
+      // If this was the current download, reset state
+      if (_downloadId == downloadId) {
+        _clearDownloadState();
+        _stopPolling();
+        setState(() {
+          _downloading = false;
+          _downloadId = null;
+          _downloadSpeed = null;
+          _downloadEta = null;
+          _downloadStatus = '';
+        });
+      }
+      _checkActiveDownloads();
+      if (mounted) {
+        ScaffoldMessenger.of(context).showSnackBar(
+          SnackBar(
+            content: Text('Download dibatalkan'),
+            backgroundColor: Colors.orange.shade600,
+            behavior: SnackBarBehavior.floating,
+            shape:
+                RoundedRectangleBorder(borderRadius: BorderRadius.circular(10)),
+          ),
+        );
+      }
+    } catch (e) {
+      if (mounted) {
+        ScaffoldMessenger.of(context).showSnackBar(
+          SnackBar(
+            content: Text('Gagal membatalkan: $e'),
+            backgroundColor: Colors.red.shade600,
+            behavior: SnackBarBehavior.floating,
+            shape:
+                RoundedRectangleBorder(borderRadius: BorderRadius.circular(10)),
+          ),
+        );
+      }
+    }
   }
 
   // ── Persist download state to SharedPreferences ─────────
@@ -150,7 +224,7 @@ class _VideoDownloaderScreenState extends State<VideoDownloaderScreen> {
       final data = await _videoApi.activeDownloads();
       final items =
           data.map((e) => Map<String, dynamic>.from(e as Map)).toList();
-      if (items.isNotEmpty && mounted) {
+      if (mounted) {
         setState(() => _activeDownloads = items);
       }
     } catch (_) {}
@@ -205,6 +279,18 @@ class _VideoDownloaderScreenState extends State<VideoDownloaderScreen> {
                 _downloadEta = null;
               });
               _stopPolling();
+              _checkActiveDownloads();
+            } else if (status == 'cancelled' && mounted) {
+              _clearDownloadState();
+              setState(() {
+                _downloading = false;
+                _downloadStatus = 'Dibatalkan';
+                _downloadId = null;
+                _downloadSpeed = null;
+                _downloadEta = null;
+              });
+              _stopPolling();
+              _checkActiveDownloads();
             }
           } catch (_) {}
         },
@@ -1129,6 +1215,18 @@ class _VideoDownloaderScreenState extends State<VideoDownloaderScreen> {
             Text(
               '${pct.toStringAsFixed(1)}%',
               style: const TextStyle(fontSize: 12, fontWeight: FontWeight.w600),
+            ),
+            const SizedBox(width: 4),
+            SizedBox(
+              width: 28,
+              height: 28,
+              child: IconButton(
+                padding: EdgeInsets.zero,
+                iconSize: 16,
+                icon: const Icon(Icons.cancel, color: Colors.redAccent),
+                tooltip: 'Batalkan',
+                onPressed: () => _cancelDownload(fn),
+              ),
             ),
           ],
         ),

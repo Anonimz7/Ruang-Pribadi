@@ -5,6 +5,7 @@ import 'package:http/http.dart' as http;
 import 'package:web_socket_channel/web_socket_channel.dart';
 import 'api_client.dart';
 import 'api_config.dart';
+import '../news_intel/models/stock_models.dart';
 
 // ─── Auth ────────────────────────────────────────────────────────────────────
 
@@ -78,6 +79,8 @@ class NewsApi {
 class StockApi {
   final _c = ApiClient();
 
+  // ── Raw (dynamic) methods — kept for backward compatibility ──
+
   Future<List<dynamic>> search(String q) async {
     final r = await _c.get('/idx/stocks', {'q': q});
     return r is List ? r : [];
@@ -94,6 +97,43 @@ class StockApi {
   /// [GET /idx/stocks/{ticker}] — Detail / profile satu saham
   Future<Map<String, dynamic>> stockDetail(String ticker) async =>
       (await _c.get('/idx/stocks/$ticker')) as Map<String, dynamic>;
+
+  // ── Typed methods (recommended) ──────────────────────────────────────────
+
+  /// Search saham by ticker atau nama — returns typed [StockListItem] list.
+  Future<List<StockListItem>> searchTyped(String q) async {
+    final r = await _c.get('/idx/stocks', {'q': q});
+    if (r is! List) return [];
+    return r
+        .map((e) => StockListItem.fromJson(e as Map<String, dynamic>))
+        .toList();
+  }
+
+  /// List semua saham dengan paginasi — returns [StockListResponse].
+  ///
+  /// ```dart
+  /// final res = await api.stockList(limit: 100, offset: 0);
+  /// print('${res.total} saham total, showing ${res.stocks.length}');
+  /// ```
+  Future<StockListResponse> stockList({int limit = 100, int offset = 0}) async {
+    final r = await _c.get('/idx/stocks', {
+      'limit': '$limit',
+      'offset': '$offset',
+    });
+    return StockListResponse.fromJson(r as Map<String, dynamic>);
+  }
+
+  /// Detail profile satu saham — returns typed [StockProfile].
+  Future<StockProfile> stockProfile(String ticker) async {
+    final r = await _c.get('/idx/stocks/$ticker');
+    return StockProfile.fromJson(r as Map<String, dynamic>);
+  }
+
+  /// Analisis lengkap satu saham — returns typed [StockAnalysis].
+  Future<StockAnalysis> stockAnalysis(String ticker, {int days = 90}) async {
+    final r = await _c.get('/idx/stocks/$ticker/analysis', {'days': '$days'});
+    return StockAnalysis.fromJson(r as Map<String, dynamic>);
+  }
 
   /// [GET /idx/market/radar] — Market radar
   Future<List<dynamic>> radar({int days = 30}) async {
@@ -568,6 +608,13 @@ class VideoApi {
   Future<Map<String, dynamic>> deleteVideo(String fileName) async {
     final encodedName = Uri.encodeComponent(fileName);
     return (await _c.delete('/video/$encodedName')) as Map<String, dynamic>;
+  }
+
+  /// [POST /video/cancel/{download_id}] — Cancel an active download
+  Future<Map<String, dynamic>> cancelDownload(String downloadId) async {
+    final encodedId = Uri.encodeComponent(downloadId);
+    return (await _c.post('/video/cancel/$encodedId', {}))
+        as Map<String, dynamic>;
   }
 
   /// Get stream URL for playing a downloaded video

@@ -4,9 +4,12 @@ import 'package:intl/intl.dart';
 import '../../services/apis.dart';
 import '../../services/api_client.dart';
 import '../../services/app_registry.dart';
+import '../models/stock_models.dart';
+import '../../widgets/stock_widgets.dart';
 
 class StocksScreen extends StatefulWidget {
-  const StocksScreen({super.key});
+  final String? initialTicker;
+  const StocksScreen({super.key, this.initialTicker});
 
   @override
   State<StocksScreen> createState() => _StocksScreenState();
@@ -15,10 +18,19 @@ class StocksScreen extends StatefulWidget {
 class _StocksScreenState extends State<StocksScreen> {
   final _api = StockApi();
   final _searchCtrl = TextEditingController();
-  List<dynamic> _results = [];
-  Map<String, dynamic>? _analysis;
+  List<StockListItem> _results = [];
+  StockAnalysis? _analysis;
   bool _loading = false;
   int _days = 30;
+
+  @override
+  void initState() {
+    super.initState();
+    if (widget.initialTicker != null) {
+      _searchCtrl.text = widget.initialTicker!;
+      _load(widget.initialTicker!);
+    }
+  }
 
   // ── Compare state ──────────────────────────────────────────────────────────
   bool _compareMode = false;
@@ -44,7 +56,7 @@ class _StocksScreenState extends State<StocksScreen> {
       return;
     }
     try {
-      final results = await _api.search(q);
+      final results = await _api.searchTyped(q);
       if (mounted && _searchCtrl.text == q) {
         setState(() => _results = results);
       }
@@ -59,7 +71,7 @@ class _StocksScreenState extends State<StocksScreen> {
 
   Future<void> _load(String ticker) async {
     final t = ticker.toUpperCase();
-    final isSameTicker = _analysis != null && _analysis!['ticker'] == t;
+    final isSameTicker = _analysis != null && _analysis!.ticker == t;
     setState(() {
       _loading = true;
       _results = [];
@@ -67,7 +79,7 @@ class _StocksScreenState extends State<StocksScreen> {
       if (!isSameTicker) _resetCompare();
     });
     try {
-      final d = await _api.analysis(ticker, days: _days);
+      final d = await _api.stockAnalysis(ticker, days: _days);
       setState(() => _analysis = d);
     } catch (e) {
       if (mounted) {
@@ -86,8 +98,8 @@ class _StocksScreenState extends State<StocksScreen> {
     if (_compareTickers.contains(t)) return;
     setState(() => _compareLoading = true);
     try {
-      final d = await _api.analysis(t, days: _days);
-      final data = d['data'] as List? ?? [];
+      final d = await _api.stockAnalysis(t, days: _days);
+      final data = d.data;
       if (data.isEmpty) {
         if (mounted) {
           ScaffoldMessenger.of(context).showSnackBar(
@@ -98,7 +110,7 @@ class _StocksScreenState extends State<StocksScreen> {
       }
       setState(() {
         _compareTickers.add(t);
-        _compareData[t] = data;
+        _compareData[t] = data.map((e) => e.toJson()).toList();
         _compareMode = true;
       });
     } catch (e) {
@@ -116,10 +128,10 @@ class _StocksScreenState extends State<StocksScreen> {
     final t = ticker.toUpperCase();
     if (!_compareTickers.contains(t)) return;
     try {
-      final d = await _api.analysis(t, days: _days);
-      final data = d['data'] as List? ?? [];
+      final d = await _api.stockAnalysis(t, days: _days);
+      final data = d.data;
       if (data.isNotEmpty) {
-        setState(() => _compareData[t] = data);
+        setState(() => _compareData[t] = data.map((e) => e.toJson()).toList());
       }
     } catch (_) {}
   }
@@ -134,7 +146,7 @@ class _StocksScreenState extends State<StocksScreen> {
 
   void _showCompareSearch() {
     final ctrl = TextEditingController();
-    List<dynamic> results = [];
+    List<StockListItem> results = [];
     bool searching = false;
 
     showModalBottomSheet(
@@ -152,7 +164,7 @@ class _StocksScreenState extends State<StocksScreen> {
                 return;
               }
               try {
-                final r = await _api.search(q);
+                final r = await _api.searchTyped(q);
                 if (ctx.mounted) setSheet(() => results = r);
               } catch (_) {}
             }
@@ -205,9 +217,8 @@ class _StocksScreenState extends State<StocksScreen> {
                         itemCount: results.length,
                         itemBuilder: (_, i) {
                           final s = results[i];
-                          final t = s['ticker'] ?? '';
                           final already =
-                              _compareTickers.contains(t.toUpperCase());
+                              _compareTickers.contains(s.ticker.toUpperCase());
                           return ListTile(
                             dense: true,
                             leading: Icon(
@@ -216,16 +227,22 @@ class _StocksScreenState extends State<StocksScreen> {
                                   : Icons.add_circle_outline,
                               color: already ? Colors.green : Colors.grey,
                             ),
-                            title: Text(t,
-                                style: const TextStyle(
-                                    fontWeight: FontWeight.bold)),
-                            subtitle: Text(s['company_name'] ?? '',
+                            title: Row(
+                              children: [
+                                Text(s.ticker,
+                                    style: const TextStyle(
+                                        fontWeight: FontWeight.bold)),
+                                const SizedBox(width: 6),
+                                StockSectorBadge(label: s.sector, small: true),
+                              ],
+                            ),
+                            subtitle: Text(s.companyName,
                                 style: const TextStyle(fontSize: 12)),
                             onTap: already
                                 ? null
                                 : () async {
                                     Navigator.pop(ctx);
-                                    await _addCompare(t);
+                                    await _addCompare(s.ticker);
                                   },
                           );
                         },
@@ -314,7 +331,7 @@ class _StocksScreenState extends State<StocksScreen> {
                             onSelected: (_) {
                               setState(() => _days = d);
                               if (_analysis != null) {
-                                _load(_analysis!['ticker']);
+                                _load(_analysis!.ticker);
                                 // Refresh compare data with new period
                                 for (final t in _compareTickers) {
                                   _refreshCompare(t);
@@ -398,11 +415,23 @@ class _StocksScreenState extends State<StocksScreen> {
                     dense: true,
                     leading:
                         const Icon(Icons.show_chart, color: Color(0xFF00C87A)),
-                    title: Text(s['ticker'],
-                        style: const TextStyle(fontWeight: FontWeight.bold)),
-                    subtitle: Text(s['company_name'],
+                    title: Row(
+                      children: [
+                        Text(s.ticker,
+                            style:
+                                const TextStyle(fontWeight: FontWeight.bold)),
+                        const SizedBox(width: 6),
+                        StockSectorBadge(label: s.sector, small: true),
+                        if (s.isDelisted) ...[
+                          const SizedBox(width: 4),
+                          DelistedBadge(
+                              labelDelisted: s.labelDelisted, small: true),
+                        ],
+                      ],
+                    ),
+                    subtitle: Text(s.companyName,
                         style: const TextStyle(fontSize: 12)),
-                    onTap: () => _load(s['ticker']),
+                    onTap: () => _load(s.ticker),
                   );
                 },
               ),
@@ -422,8 +451,9 @@ class _StocksScreenState extends State<StocksScreen> {
   }
 
   Widget _buildAnalysis() {
-    final s = _analysis!['summary'] ?? {};
-    final data = _analysis!['data'] as List? ?? [];
+    final s = _analysis!.summary;
+    final data = _analysis!.data;
+    final rawData = data.map((e) => e.toJson()).toList();
     return SingleChildScrollView(
       padding: const EdgeInsets.all(12),
       child: Column(crossAxisAlignment: CrossAxisAlignment.start, children: [
@@ -433,56 +463,61 @@ class _StocksScreenState extends State<StocksScreen> {
               child: Column(
                   crossAxisAlignment: CrossAxisAlignment.start,
                   children: [
-                Text(_analysis!['ticker'],
-                    style: const TextStyle(
-                        fontSize: 22, fontWeight: FontWeight.bold)),
-                Text(_analysis!['company_name'],
+                Row(
+                  children: [
+                    Text(_analysis!.ticker,
+                        style: const TextStyle(
+                            fontSize: 22, fontWeight: FontWeight.bold)),
+                    const SizedBox(width: 8),
+                    DelistedBadge(labelDelisted: _analysis!.labelDelisted),
+                  ],
+                ),
+                Text(_analysis!.companyName,
                     style: const TextStyle(fontSize: 13, color: Colors.grey)),
               ])),
           Column(crossAxisAlignment: CrossAxisAlignment.end, children: [
-            Text('Rp ${_fmt(s['latest_price'])}',
+            Text('Rp ${_fmt(s.latestPrice)}',
                 style:
                     const TextStyle(fontSize: 18, fontWeight: FontWeight.bold)),
-            Text('${(s['price_change_pct'] ?? 0).toStringAsFixed(1)}%',
+            Text('${s.priceChangePct.toStringAsFixed(1)}%',
                 style: TextStyle(
-                    color: (s['price_change_pct'] ?? 0) >= 0
-                        ? Colors.green
-                        : Colors.red)),
+                    color: s.priceChangePct >= 0 ? Colors.green : Colors.red)),
           ]),
         ]),
+
+        // ── Sector Info Card ──
+        StockInfoCard(stock: _analysis!),
+
         const SizedBox(height: 12),
         // Metrics – Row 1
         Row(children: [
-          _metric('BII Score', (s['latest_bii_score'] ?? 0).toStringAsFixed(1),
-              Colors.purple),
           _metric(
-              'Foreign %',
-              '${(s['foreign_domination_pct'] ?? 0).toStringAsFixed(1)}%',
+              'BII Score', s.latestBiiScore.toStringAsFixed(1), Colors.purple),
+          _metric('Foreign %', '${s.foreignDominationPct.toStringAsFixed(1)}%',
               Colors.blue),
-          _metric('Net Foreign', _fmtS(s['total_net_foreign']), Colors.teal),
+          _metric('Net Foreign', _fmtS(s.totalNetForeign), Colors.teal),
         ]),
         const SizedBox(height: 8),
         // Metrics – Row 2
         Row(children: [
-          _metric('Total Value', _fmtS(s['total_value']), Colors.orange),
-          _metric('Total Vol', _fmtS(s['total_volume']), Colors.cyan),
-          _metric('Avg BII', (s['avg_bii_score'] ?? 0).toStringAsFixed(1),
-              Colors.indigo),
+          _metric('Total Value', _fmtS(s.totalValue), Colors.orange),
+          _metric('Total Vol', _fmtS(s.totalVolume), Colors.cyan),
+          _metric('Avg BII', s.avgBiiScore.toStringAsFixed(1), Colors.indigo),
         ]),
         const SizedBox(height: 24),
-        if (data.isNotEmpty) ...[
+        if (rawData.isNotEmpty) ...[
           // ── Compare chart (when compare mode + data) ──
           if (_compareMode && _compareTickers.isNotEmpty) ...[
             _chartPanel(
               title: 'Perbandingan Harga (Normalisasi)',
               subtitle: 'Persentase perubahan dari hari pertama',
               legend: [
-                _ChartLegendItem(_analysis!['ticker'].toString(), _colorFor(0)),
+                _ChartLegendItem(_analysis!.ticker, _colorFor(0)),
                 for (int i = 0; i < _compareTickers.length; i++)
                   _ChartLegendItem(_compareTickers[i], _colorFor(i + 1)),
               ],
               height: 300,
-              child: _buildCompareChart(data),
+              child: _buildCompareChart(rawData),
             ),
             const SizedBox(height: 28),
           ] else ...[
@@ -493,7 +528,7 @@ class _StocksScreenState extends State<StocksScreen> {
                 _ChartLegendItem('Harga penutupan', Color(0xFF00A86B)),
               ],
               height: 270,
-              child: _priceChart(data),
+              child: _priceChart(rawData),
             ),
             const SizedBox(height: 28),
           ],
@@ -505,7 +540,7 @@ class _StocksScreenState extends State<StocksScreen> {
               _ChartLegendItem('Jual bersih', Color(0xFFD94B4B)),
             ],
             height: 210,
-            child: _foreignChart(data),
+            child: _foreignChart(rawData),
           ),
           const SizedBox(height: 28),
           _chartPanel(
@@ -515,7 +550,7 @@ class _StocksScreenState extends State<StocksScreen> {
               _ChartLegendItem('Nilai transaksi', Color(0xFFF6903D)),
             ],
             height: 200,
-            child: _valueChart(data),
+            child: _valueChart(rawData),
           ),
           const SizedBox(height: 28),
           _chartPanel(
@@ -526,7 +561,7 @@ class _StocksScreenState extends State<StocksScreen> {
               _ChartLegendItem('ATV', Color(0xFF9270CA)),
             ],
             height: 200,
-            child: _atvChart(data),
+            child: _atvChart(rawData),
           ),
           const SizedBox(height: 28),
           _chartPanel(
@@ -536,7 +571,7 @@ class _StocksScreenState extends State<StocksScreen> {
               _ChartLegendItem('BII Score', Color(0xFF7B61FF)),
             ],
             height: 210,
-            child: _biiScoreChart(data),
+            child: _biiScoreChart(rawData),
           ),
           const SizedBox(height: 28),
           _chartPanel(
@@ -546,7 +581,7 @@ class _StocksScreenState extends State<StocksScreen> {
               _ChartLegendItem('Nego Value', Color(0xFFF6C022)),
             ],
             height: 200,
-            child: _negoValueChart(data),
+            child: _negoValueChart(rawData),
           ),
           const SizedBox(height: 28),
           _chartPanel(
@@ -556,7 +591,7 @@ class _StocksScreenState extends State<StocksScreen> {
               _ChartLegendItem('Nego Freq', Color(0xFF90A4AE)),
             ],
             height: 180,
-            child: _negoFreqChart(data),
+            child: _negoFreqChart(rawData),
           ),
           const SizedBox(height: 28),
           _chartPanel(
@@ -566,11 +601,11 @@ class _StocksScreenState extends State<StocksScreen> {
               _ChartLegendItem('Volume', Color(0xFF6DC8EC)),
             ],
             height: 200,
-            child: _volumeChart(data),
+            child: _volumeChart(rawData),
           ),
           const SizedBox(height: 28),
           // ── Data Summary Table ──
-          _buildSummaryTable(data),
+          _buildSummaryTable(rawData),
         ],
       ]),
     );
@@ -1294,88 +1329,85 @@ class _StocksScreenState extends State<StocksScreen> {
         SingleChildScrollView(
           scrollDirection: Axis.horizontal,
           child: DataTable(
-                  headingRowColor: WidgetStateProperty.all(
-                      colors.surfaceContainerHighest.withValues(alpha: 0.5)),
-                  dataRowMinHeight: 34,
-                  dataRowMaxHeight: 38,
-                  headingRowHeight: 36,
-                  horizontalMargin: 12,
-                  columnSpacing: 14,
-                  columns: const [
-                    DataColumn(
-                        label: Text('Tanggal',
-                            style: TextStyle(
-                                fontSize: 10, fontWeight: FontWeight.bold))),
-                    DataColumn(
-                        label: Text('Harga',
-                            style: TextStyle(
-                                fontSize: 10, fontWeight: FontWeight.bold))),
-                    DataColumn(
-                        label: Text('Chg%',
-                            style: TextStyle(
-                                fontSize: 10, fontWeight: FontWeight.bold))),
-                    DataColumn(
-                        label: Text('Net For.',
-                            style: TextStyle(
-                                fontSize: 10, fontWeight: FontWeight.bold))),
-                    DataColumn(
-                        label: Text('ATV',
-                            style: TextStyle(
-                                fontSize: 10, fontWeight: FontWeight.bold))),
-                    DataColumn(
-                        label: Text('BII',
-                            style: TextStyle(
-                                fontSize: 10, fontWeight: FontWeight.bold))),
-                    DataColumn(
-                        label: Text('F:R',
-                            style: TextStyle(
-                                fontSize: 10, fontWeight: FontWeight.bold))),
-                  ],
-                  rows: rows.map((r) {
-                    final close = (r['close'] as num?)?.toDouble() ?? 0;
-                    final prevPrice =
-                        (r['prev_price'] as num?)?.toDouble() ?? close;
-                    final chg = prevPrice > 0
-                        ? ((close - prevPrice) / prevPrice * 100)
-                        : 0.0;
-                    final netF = (r['net_foreign'] as num?)?.toDouble() ?? 0;
-                    final atv = (r['atv'] as num?)?.toDouble() ?? 0;
-                    final bii = (r['bii_score'] as num?)?.toDouble() ?? 0;
-                    final fb = (r['foreign_buy'] as num?)?.toDouble() ?? 0;
-                    final fs = (r['foreign_sell'] as num?)?.toDouble() ?? 0;
-                    final vol = (r['volume'] as num?)?.toDouble() ?? 0;
-                    final frRatio =
-                        vol > 0 ? ((fb + fs) / (vol * 2) * 100) : 0.0;
-                    return DataRow(cells: [
-                      DataCell(Text(_dateLabel(r['date']),
-                          style: const TextStyle(fontSize: 10))),
-                      DataCell(Text('Rp ${_fmt(close)}',
-                          style: const TextStyle(
-                              fontSize: 10, fontWeight: FontWeight.w600))),
-                      DataCell(Text(
-                          '${chg >= 0 ? '+' : ''}${chg.toStringAsFixed(1)}%',
-                          style: TextStyle(
-                              fontSize: 10,
-                              color: chg >= 0 ? Colors.green : Colors.red))),
-                      DataCell(Text(_fmtS(netF),
-                          style: TextStyle(
-                              fontSize: 10,
-                              color: netF >= 0 ? Colors.green : Colors.red))),
-                      DataCell(Text(_compact(atv),
-                          style: const TextStyle(fontSize: 10))),
-                      DataCell(Text(bii.toStringAsFixed(1),
-                          style: const TextStyle(
-                              fontSize: 10,
-                              color: Color(0xFF7B61FF),
-                              fontWeight: FontWeight.w600))),
-                      DataCell(Text('${frRatio.toStringAsFixed(1)}%',
-                          style: const TextStyle(fontSize: 10))),
-                    ]);
-                  }).toList(),
-                ),
-              ),
-        ],
-      );
+            headingRowColor: WidgetStateProperty.all(
+                colors.surfaceContainerHighest.withValues(alpha: 0.5)),
+            dataRowMinHeight: 34,
+            dataRowMaxHeight: 38,
+            headingRowHeight: 36,
+            horizontalMargin: 12,
+            columnSpacing: 14,
+            columns: const [
+              DataColumn(
+                  label: Text('Tanggal',
+                      style: TextStyle(
+                          fontSize: 10, fontWeight: FontWeight.bold))),
+              DataColumn(
+                  label: Text('Harga',
+                      style: TextStyle(
+                          fontSize: 10, fontWeight: FontWeight.bold))),
+              DataColumn(
+                  label: Text('Chg%',
+                      style: TextStyle(
+                          fontSize: 10, fontWeight: FontWeight.bold))),
+              DataColumn(
+                  label: Text('Net For.',
+                      style: TextStyle(
+                          fontSize: 10, fontWeight: FontWeight.bold))),
+              DataColumn(
+                  label: Text('ATV',
+                      style: TextStyle(
+                          fontSize: 10, fontWeight: FontWeight.bold))),
+              DataColumn(
+                  label: Text('BII',
+                      style: TextStyle(
+                          fontSize: 10, fontWeight: FontWeight.bold))),
+              DataColumn(
+                  label: Text('F:R',
+                      style: TextStyle(
+                          fontSize: 10, fontWeight: FontWeight.bold))),
+            ],
+            rows: rows.map((r) {
+              final close = (r['close'] as num?)?.toDouble() ?? 0;
+              final prevPrice = (r['prev_price'] as num?)?.toDouble() ?? close;
+              final chg =
+                  prevPrice > 0 ? ((close - prevPrice) / prevPrice * 100) : 0.0;
+              final netF = (r['net_foreign'] as num?)?.toDouble() ?? 0;
+              final atv = (r['atv'] as num?)?.toDouble() ?? 0;
+              final bii = (r['bii_score'] as num?)?.toDouble() ?? 0;
+              final fb = (r['foreign_buy'] as num?)?.toDouble() ?? 0;
+              final fs = (r['foreign_sell'] as num?)?.toDouble() ?? 0;
+              final vol = (r['volume'] as num?)?.toDouble() ?? 0;
+              final frRatio = vol > 0 ? ((fb + fs) / (vol * 2) * 100) : 0.0;
+              return DataRow(cells: [
+                DataCell(Text(_dateLabel(r['date']),
+                    style: const TextStyle(fontSize: 10))),
+                DataCell(Text('Rp ${_fmt(close)}',
+                    style: const TextStyle(
+                        fontSize: 10, fontWeight: FontWeight.w600))),
+                DataCell(Text(
+                    '${chg >= 0 ? '+' : ''}${chg.toStringAsFixed(1)}%',
+                    style: TextStyle(
+                        fontSize: 10,
+                        color: chg >= 0 ? Colors.green : Colors.red))),
+                DataCell(Text(_fmtS(netF),
+                    style: TextStyle(
+                        fontSize: 10,
+                        color: netF >= 0 ? Colors.green : Colors.red))),
+                DataCell(
+                    Text(_compact(atv), style: const TextStyle(fontSize: 10))),
+                DataCell(Text(bii.toStringAsFixed(1),
+                    style: const TextStyle(
+                        fontSize: 10,
+                        color: Color(0xFF7B61FF),
+                        fontWeight: FontWeight.w600))),
+                DataCell(Text('${frRatio.toStringAsFixed(1)}%',
+                    style: const TextStyle(fontSize: 10))),
+              ]);
+            }).toList(),
+          ),
+        ),
+      ],
+    );
   }
 
   // ── Foreign Chart ────────────────────────────────────────────────────────
@@ -1477,7 +1509,7 @@ class _StocksScreenState extends State<StocksScreen> {
 
     // Primary stock
     series.add(_CompareSeries(
-      ticker: _analysis!['ticker'].toString(),
+      ticker: _analysis!.ticker,
       color: _colorFor(0),
       data: primaryData,
     ));

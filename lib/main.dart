@@ -1,3 +1,4 @@
+import 'dart:async';
 import 'package:flutter/material.dart';
 import 'package:provider/provider.dart';
 import 'math_speed/math.dart';
@@ -7,6 +8,7 @@ import 'services/app_registry.dart';
 import 'services/dark_mode_service.dart';
 import 'widgets/app_drawer.dart';
 import 'widgets/login_screen.dart';
+import 'video_downloader/screens/video_downloader_screen.dart';
 
 void main() {
   WidgetsFlutterBinding.ensureInitialized();
@@ -44,7 +46,8 @@ class _MyAppState extends State<MyApp> {
             valueListenable: darkModeNotifier,
             builder: (ctx, isDark, _) => MaterialApp(
               title: 'Ruang VIP',
-              theme: ThemeData(fontFamily: 'Roboto', brightness: Brightness.light),
+              theme:
+                  ThemeData(fontFamily: 'Roboto', brightness: Brightness.light),
               darkTheme: ThemeData(brightness: Brightness.dark),
               themeMode: isDark ? ThemeMode.dark : ThemeMode.light,
               home: const MainPage(),
@@ -71,16 +74,66 @@ class _MainPageState extends State<MainPage> {
   final _client = ApiClient();
   bool _loading = true;
 
+  // ── Persistent download status banner ──
+  int _activeDownloadCount = 0;
+  double _activeDownloadProgress = 0;
+  String _activeDownloadFilename = '';
+  Timer? _downloadPollTimer;
+
   @override
   void initState() {
     super.initState();
+    // Register the session-expired callback so every 401 triggers
+    // an automatic popup + logout.
+    _client.onSessionExpired = _onSessionExpired;
     _init();
+    _startDownloadPolling();
+  }
+
+  @override
+  void dispose() {
+    // Clean up callback when the widget is disposed
+    _client.onSessionExpired = null;
+    _downloadPollTimer?.cancel();
+    super.dispose();
+  }
+
+  // ── Poll active downloads every 5s ──
+  void _startDownloadPolling() {
+    _downloadPollTimer?.cancel();
+    _downloadPollTimer = Timer.periodic(
+      const Duration(seconds: 5),
+      (_) => _checkActiveDownloads(),
+    );
+    // Also check immediately
+    _checkActiveDownloads();
+  }
+
+  Future<void> _checkActiveDownloads() async {
+    if (!_client.isLoggedIn) return;
+    try {
+      final data = await VideoApi().activeDownloads();
+      if (!mounted) return;
+      final items =
+          data.map((e) => Map<String, dynamic>.from(e as Map)).toList();
+      setState(() {
+        _activeDownloadCount = items.length;
+        if (items.isNotEmpty) {
+          // Show the first (most recent) active download's progress
+          final first = items.first;
+          _activeDownloadProgress = (first['progress'] ?? 0).toDouble();
+          _activeDownloadFilename = first['filename'] ?? '';
+        }
+      });
+    } catch (_) {}
   }
 
   Future<void> _init() async {
     await _client.loadSession();
     if (_client.isLoggedIn) {
-      try { await AuthApi().me(); } catch (_) {}
+      try {
+        await AuthApi().me();
+      } catch (_) {}
     }
     setState(() => _loading = false);
   }
@@ -88,6 +141,53 @@ class _MainPageState extends State<MainPage> {
   void _onItemTapped(int index) {
     setState(() => _selectedIndex = index);
     Navigator.pop(context);
+  }
+
+  // ── Session expired handler ──────────────────────
+  void _onSessionExpired() async {
+    await _client.clearSession();
+    if (!mounted) return;
+    setState(() => _selectedIndex = 1);
+    if (!mounted) return;
+    showDialog(
+      context: context,
+      barrierDismissible: false,
+      builder: (ctx) => AlertDialog(
+        icon:
+            const Icon(Icons.timer_off_rounded, color: Colors.orange, size: 48),
+        title: const Text('Sesi Berakhir'),
+        content: const Text(
+          'Sesi login Anda telah berakhir.\nSilakan login kembali untuk melanjutkan.',
+        ),
+        actions: [
+          ElevatedButton(
+            onPressed: () {
+              Navigator.pop(ctx);
+              _showLoginDialog();
+            },
+            style: ElevatedButton.styleFrom(
+              backgroundColor: const Color(0xFF00C87A),
+              foregroundColor: Colors.black,
+            ),
+            child: const Text('LOGIN'),
+          ),
+        ],
+      ),
+    );
+  }
+
+  // ── Login dialog (popup) ────────────────────────
+  void _showLoginDialog() {
+    showDialog(
+      context: context,
+      builder: (ctx) => _LoginDialog(
+        client: _client,
+        onSuccess: () async {
+          await _client.loadSession();
+          if (mounted) setState(() {});
+        },
+      ),
+    );
   }
 
   /// Build page based on index — checks permissions
@@ -118,7 +218,8 @@ class _MainPageState extends State<MainPage> {
 
   @override
   Widget build(BuildContext context) {
-    if (_loading) return const Scaffold(body: Center(child: CircularProgressIndicator()));
+    if (_loading)
+      return const Scaffold(body: Center(child: CircularProgressIndicator()));
 
     return Scaffold(
       appBar: AppBar(title: const Text('Ruang Pribadi')),
@@ -130,8 +231,74 @@ class _MainPageState extends State<MainPage> {
           await _client.clearSession();
           setState(() => _selectedIndex = 1);
         },
+        onLoginTap: _showLoginDialog,
       ),
-      body: _buildPage(_selectedIndex),
+      body: Column(
+        children: [
+          // ── Persistent download status banner ──
+          if (_activeDownloadCount > 0)
+            Material(
+              color: Colors.blue.shade50,
+              child: InkWell(
+                onTap: () {
+                  Navigator.push(
+                    context,
+                    MaterialPageRoute(
+                        builder: (_) => const VideoDownloaderScreen()),
+                  );
+                },
+                child: Container(
+                  width: double.infinity,
+                  padding:
+                      const EdgeInsets.symmetric(horizontal: 16, vertical: 10),
+                  child: Row(
+                    children: [
+                      const SizedBox(
+                        width: 16,
+                        height: 16,
+                        child: CircularProgressIndicator(strokeWidth: 2),
+                      ),
+                      const SizedBox(width: 12),
+                      Expanded(
+                        child: Column(
+                          crossAxisAlignment: CrossAxisAlignment.start,
+                          mainAxisSize: MainAxisSize.min,
+                          children: [
+                            Text(
+                              '$_activeDownloadCount download sedang berjalan',
+                              style: const TextStyle(
+                                  fontWeight: FontWeight.w600, fontSize: 13),
+                            ),
+                            if (_activeDownloadFilename.isNotEmpty) ...[
+                              const SizedBox(height: 2),
+                              Text(
+                                _activeDownloadFilename,
+                                style: TextStyle(
+                                    fontSize: 11, color: Colors.grey.shade600),
+                                maxLines: 1,
+                                overflow: TextOverflow.ellipsis,
+                              ),
+                            ],
+                          ],
+                        ),
+                      ),
+                      if (_activeDownloadProgress > 0)
+                        Text(
+                          '${_activeDownloadProgress.toStringAsFixed(0)}%',
+                          style: const TextStyle(
+                              fontWeight: FontWeight.w700, fontSize: 13),
+                        ),
+                      const SizedBox(width: 8),
+                      Icon(Icons.chevron_right, color: Colors.grey.shade400),
+                    ],
+                  ),
+                ),
+              ),
+            ),
+          // ── Page content ──
+          Expanded(child: _buildPage(_selectedIndex)),
+        ],
+      ),
     );
   }
 
@@ -144,7 +311,8 @@ class _MainPageState extends State<MainPage> {
           children: [
             const Icon(Icons.lock_outline, size: 64, color: Colors.grey),
             const SizedBox(height: 16),
-            Text('Akses Terbatas', style: Theme.of(context).textTheme.titleLarge),
+            Text('Akses Terbatas',
+                style: Theme.of(context).textTheme.titleLarge),
             const SizedBox(height: 8),
             Text(
               'Anda belum memiliki akses ke "${app.label}".\nHubungi admin untuk mendapatkan izin.',
@@ -154,6 +322,119 @@ class _MainPageState extends State<MainPage> {
           ],
         ),
       ),
+    );
+  }
+}
+
+// ═══════════════════════════════════════════════════
+// LOGIN DIALOG (reusable popup)
+// ═══════════════════════════════════════════════════
+
+class _LoginDialog extends StatefulWidget {
+  final ApiClient client;
+  final VoidCallback onSuccess;
+  const _LoginDialog({required this.client, required this.onSuccess});
+
+  @override
+  State<_LoginDialog> createState() => _LoginDialogState();
+}
+
+class _LoginDialogState extends State<_LoginDialog> {
+  final _userCtrl = TextEditingController();
+  final _passCtrl = TextEditingController();
+  bool _loading = false;
+  String? _error;
+
+  @override
+  void dispose() {
+    _userCtrl.dispose();
+    _passCtrl.dispose();
+    super.dispose();
+  }
+
+  Future<void> _submit() async {
+    setState(() {
+      _loading = true;
+      _error = null;
+    });
+    try {
+      await AuthApi().login(_userCtrl.text.trim(), _passCtrl.text);
+      widget.onSuccess();
+      if (mounted) Navigator.pop(context);
+    } catch (e) {
+      setState(() {
+        _error = e.toString().replaceAll('Exception: ', '');
+      });
+    } finally {
+      if (mounted)
+        setState(() {
+          _loading = false;
+        });
+    }
+  }
+
+  @override
+  Widget build(BuildContext context) {
+    return AlertDialog(
+      title: const Row(
+        children: [
+          Icon(Icons.login, size: 24),
+          SizedBox(width: 8),
+          Text('Login'),
+        ],
+      ),
+      content: SizedBox(
+        width: 340,
+        child: Column(
+          mainAxisSize: MainAxisSize.min,
+          children: [
+            TextField(
+              controller: _userCtrl,
+              decoration: const InputDecoration(
+                labelText: 'Username',
+                prefixIcon: Icon(Icons.person),
+                border: OutlineInputBorder(),
+              ),
+            ),
+            const SizedBox(height: 12),
+            TextField(
+              controller: _passCtrl,
+              obscureText: true,
+              decoration: const InputDecoration(
+                labelText: 'Password',
+                prefixIcon: Icon(Icons.lock),
+                border: OutlineInputBorder(),
+              ),
+              onSubmitted: (_) => _submit(),
+            ),
+            if (_error != null) ...[
+              const SizedBox(height: 10),
+              Text(_error!,
+                  style: const TextStyle(color: Colors.red, fontSize: 12)),
+            ],
+          ],
+        ),
+      ),
+      actions: [
+        TextButton(
+          onPressed: () => Navigator.pop(context),
+          child: const Text('Batal'),
+        ),
+        ElevatedButton(
+          onPressed: _loading ? null : _submit,
+          style: ElevatedButton.styleFrom(
+            backgroundColor: const Color(0xFF00C87A),
+            foregroundColor: Colors.black,
+          ),
+          child: _loading
+              ? const SizedBox(
+                  width: 18,
+                  height: 18,
+                  child: CircularProgressIndicator(strokeWidth: 2),
+                )
+              : const Text('LOGIN'),
+        ),
+      ],
     );
   }
 }

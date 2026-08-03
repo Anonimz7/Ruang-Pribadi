@@ -2,7 +2,8 @@ name: ruang_pribadi
 description: "Aplikasi ALL Role Buat Hepi Hepi."
 publish_to: 'none' # Remove this line if you wish to publish to pub.dev
 
-version: 1.4.0+5 # Update ke versi 1.4.0 build ke 5
+version: 1.5.0+6 # Update ke versi 1.5.0 build ke 6 menambahkan fitur api untuk saham
+
 
 environment:
   sdk: ^3.6.0

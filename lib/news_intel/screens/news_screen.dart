@@ -426,6 +426,7 @@ class _NewsScreenState extends State<NewsScreen> {
     const m = {
       'reuters': Colors.orange,
       'bloomberg': Colors.blue,
+      'bloombergtechnoz': Colors.cyan,
       'ft': Colors.pink,
       'kontan': Colors.green,
       'cna': Colors.teal,

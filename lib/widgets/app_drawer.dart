@@ -8,6 +8,7 @@ class AppDrawer extends StatelessWidget {
   final ValueChanged<int> onItemTapped;
   final ApiClient client;
   final VoidCallback onLogout;
+  final VoidCallback? onLoginTap;
 
   const AppDrawer({
     super.key,
@@ -15,6 +16,7 @@ class AppDrawer extends StatelessWidget {
     required this.onItemTapped,
     required this.client,
     required this.onLogout,
+    this.onLoginTap,
   });
 
   bool _isAccessible(AppDef app) {
@@ -69,16 +71,31 @@ class AppDrawer extends StatelessWidget {
                         size: 16),
                     const SizedBox(width: 6),
                     Expanded(
-                      child: Text(
-                        client.isLoggedIn
-                            ? '${client.username} (${client.tier})'
-                            : 'Belum login — akses terbatas',
-                        style: TextStyle(
-                            color: client.isLoggedIn
-                                ? const Color(0xFF00C87A)
-                                : Colors.white70,
-                            fontSize: 12),
-                      ),
+                      child: client.isLoggedIn
+                          ? Text(
+                              '${client.username} (${client.tier})',
+                              style: const TextStyle(
+                                  color: Color(0xFF00C87A), fontSize: 12),
+                            )
+                          : GestureDetector(
+                              onTap: () {
+                                Navigator.pop(context);
+                                onLoginTap?.call();
+                              },
+                              child: Row(
+                                children: [
+                                  Text(
+                                    'Belum login — ketuk untuk login',
+                                    style: TextStyle(
+                                      color: Colors.white70,
+                                      fontSize: 12,
+                                      decoration: TextDecoration.underline,
+                                      decorationColor: Colors.white54,
+                                    ),
+                                  ),
+                                ],
+                              ),
+                            ),
                     ),
                     if (client.isLoggedIn)
                       GestureDetector(
