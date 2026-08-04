@@ -2,7 +2,7 @@ name: ruang_pribadi
 description: "Aplikasi ALL Role Buat Hepi Hepi."
 publish_to: 'none' # Remove this line if you wish to publish to pub.dev
 
-version: 1.7.0+8 # add fix bug
+version: 1.8.0+9 # add fix bug
 
 
 environment:

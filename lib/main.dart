@@ -6,7 +6,9 @@ import 'services/api_client.dart';
 import 'services/apis.dart';
 import 'services/app_registry.dart';
 import 'services/dark_mode_service.dart';
+import 'services/update_service.dart';
 import 'widgets/app_drawer.dart';
+import 'widgets/update_dialog.dart';
 import 'video_downloader/screens/video_downloader_screen.dart';
 
 void main() {
@@ -135,6 +137,19 @@ class _MainPageState extends State<MainPage> {
       } catch (_) {}
     }
     setState(() => _loading = false);
+
+    // ── Auto-check update on startup (non-blocking) ──
+    _autoCheckUpdate();
+  }
+
+  void _autoCheckUpdate() async {
+    try {
+      final info = await UpdateService().checkUpdate();
+      if (!mounted) return;
+      if (info != null && info.updateAvailable) {
+        showUpdateDialogIfNeeded(context, info);
+      }
+    } catch (_) {}
   }
 
   void _onItemTapped(int index) {
