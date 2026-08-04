@@ -353,6 +353,7 @@ class _AdminUserDetailScreenState extends State<AdminUserDetailScreen> {
       _buildMenuSection('IHSG RADAR', [
         'news',
         'stocks',
+        'stock_list',
         'ihsg_radar',
         'reports',
       ]),
@@ -458,6 +459,7 @@ class _AdminUserDetailScreenState extends State<AdminUserDetailScreen> {
       'video_downloader': '🎬 Video Downloader',
       'news': '📰 Berita',
       'stocks': '📈 Saham IDX',
+      'stock_list': '📋 Browse Saham',
       'ihsg_radar': '📡 IHSG Radar',
       'reports': '📋 Laporan',
       'admin_dashboard': '📊 Dashboard',
@@ -477,6 +479,7 @@ class _AdminUserDetailScreenState extends State<AdminUserDetailScreen> {
       'video_downloader': Colors.pink,
       'news': Colors.blue,
       'stocks': Colors.green,
+      'stock_list': Colors.teal,
       'ihsg_radar': Colors.purple,
       'reports': Colors.indigo,
       'admin_dashboard': Colors.cyan,
