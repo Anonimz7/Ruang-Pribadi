@@ -459,7 +459,7 @@ class _AdminUserDetailScreenState extends State<AdminUserDetailScreen> {
       'video_downloader': '🎬 Video Downloader',
       'news': '📰 Berita',
       'stocks': '📈 Saham IDX',
-      'stock_list': '📋 Browse Saham',
+      'stock_list': '📋 Daftar Saham',
       'ihsg_radar': '📡 IHSG Radar',
       'reports': '📋 Laporan',
       'admin_dashboard': '📊 Dashboard',

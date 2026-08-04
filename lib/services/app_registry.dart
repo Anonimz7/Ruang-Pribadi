@@ -109,7 +109,7 @@ final List<AppDef> appRegistry = [
   AppDef(
     key: 'stock_list',
     icon: Icons.list_alt,
-    label: 'Browse Saham',
+    label: 'Daftar Saham',
     builder: (_) => const StockListScreen(),
     section: 'market',
   ),

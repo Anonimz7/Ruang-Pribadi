@@ -115,18 +115,22 @@ class AppDrawer extends StatelessWidget {
           const Divider(),
 
           // ─── Fitur Lokal ─────────────────────
-          _sectionHeader('FITUR', locked: !client.isLoggedIn),
-          ...menuApps
-              .where((app) => _isAccessible(app) && !_isHidden(app))
-              .map((app) => _tile(context, app)),
+          if (client.isLoggedIn) ...[
+            _sectionHeader('FITUR'),
+            ...menuApps
+                .where((app) => _isAccessible(app) && !_isHidden(app))
+                .map((app) => _tile(context, app)),
+          ],
 
-          const Divider(),
+          if (client.isLoggedIn) const Divider(),
 
           // ─── AI Radar ─────────────────────────
-          _sectionHeader('AI RADAR', locked: !client.isLoggedIn),
-          ...marketApps
-              .where((app) => _isAccessible(app) && !_isHidden(app))
-              .map((app) => _tile(context, app)),
+          if (client.isLoggedIn) ...[
+            _sectionHeader('AI RADAR'),
+            ...marketApps
+                .where((app) => _isAccessible(app) && !_isHidden(app))
+                .map((app) => _tile(context, app)),
+          ],
 
           // ─── Admin ───────────────────────────
           if (client.tier == 'owner') ...[

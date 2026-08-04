@@ -3,6 +3,7 @@ import '../../services/api_client.dart';
 import '../../services/apis.dart';
 import '../../services/update_service.dart';
 import '../../widgets/update_dialog.dart';
+import '../../widgets/login_dialog.dart';
 
 class ProfileScreen extends StatefulWidget {
   const ProfileScreen({super.key});
@@ -143,7 +144,13 @@ class _ProfileScreenState extends State<ProfileScreen> {
             ),
             const SizedBox(height: 24),
             ElevatedButton.icon(
-              onPressed: () => Navigator.pop(context),
+              onPressed: () {
+                // Show login popup — dialog closes itself on success,
+                // then ProfileScreen rebuilds automatically to show logged-in view
+                showLoginDialog(context, onSuccess: () {
+                  if (mounted) setState(() {});
+                });
+              },
               icon: const Icon(Icons.login, color: Colors.white),
               label: const Text('LOGIN',
                   style: TextStyle(color: Colors.white, fontWeight: FontWeight.bold)),

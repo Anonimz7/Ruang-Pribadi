@@ -8,6 +8,7 @@ import 'services/app_registry.dart';
 import 'services/dark_mode_service.dart';
 import 'services/update_service.dart';
 import 'widgets/app_drawer.dart';
+import 'widgets/login_dialog.dart';
 import 'widgets/update_dialog.dart';
 import 'video_downloader/screens/video_downloader_screen.dart';
 
@@ -192,16 +193,10 @@ class _MainPageState extends State<MainPage> {
 
   // ── Login dialog (popup) ────────────────────────
   void _showLoginDialog() {
-    showDialog(
-      context: context,
-      builder: (ctx) => _LoginDialog(
-        client: _client,
-        onSuccess: () async {
-          await _client.loadSession();
-          if (mounted) setState(() {});
-        },
-      ),
-    );
+    showLoginDialog(context, onSuccess: () async {
+      await _client.loadSession();
+      if (mounted) setState(() {});
+    });
   }
 
   /// Build page based on index — checks permissions
@@ -345,142 +340,4 @@ class _MainPageState extends State<MainPage> {
   }
 }
 
-// ═══════════════════════════════════════════════════
-// LOGIN DIALOG (reusable popup)
-// ═══════════════════════════════════════════════════
 
-class _LoginDialog extends StatefulWidget {
-  final ApiClient client;
-  final VoidCallback onSuccess;
-  const _LoginDialog({required this.client, required this.onSuccess});
-
-  @override
-  State<_LoginDialog> createState() => _LoginDialogState();
-}
-
-class _LoginDialogState extends State<_LoginDialog> {
-  final _userCtrl = TextEditingController();
-  final _passCtrl = TextEditingController();
-  bool _loading = false;
-  String? _error;
-  bool _isLogin = true; // true = login mode, false = register mode
-
-  @override
-  void dispose() {
-    _userCtrl.dispose();
-    _passCtrl.dispose();
-    super.dispose();
-  }
-
-  Future<void> _submit() async {
-    setState(() {
-      _loading = true;
-      _error = null;
-    });
-    try {
-      if (_isLogin) {
-        await AuthApi().login(_userCtrl.text.trim(), _passCtrl.text);
-        widget.onSuccess();
-        if (mounted) Navigator.pop(context);
-      } else {
-        await AuthApi().register(_userCtrl.text.trim(), _passCtrl.text);
-        setState(() {
-          _isLogin = true;
-          _error = 'Registrasi berhasil! Silakan login.';
-        });
-      }
-    } catch (e) {
-      setState(() {
-        _error = e.toString().replaceAll('Exception: ', '');
-      });
-    } finally {
-      if (mounted)
-        setState(() {
-          _loading = false;
-        });
-    }
-  }
-
-  @override
-  Widget build(BuildContext context) {
-    return AlertDialog(
-      title: Row(
-        children: [
-          Icon(_isLogin ? Icons.login : Icons.person_add, size: 24),
-          const SizedBox(width: 8),
-          Text(_isLogin ? 'Login' : 'Register'),
-        ],
-      ),
-      content: SizedBox(
-        width: 340,
-        child: Column(
-          mainAxisSize: MainAxisSize.min,
-          children: [
-            TextField(
-              controller: _userCtrl,
-              decoration: const InputDecoration(
-                labelText: 'Username',
-                prefixIcon: Icon(Icons.person),
-                border: OutlineInputBorder(),
-              ),
-            ),
-            const SizedBox(height: 12),
-            TextField(
-              controller: _passCtrl,
-              obscureText: true,
-              decoration: const InputDecoration(
-                labelText: 'Password',
-                prefixIcon: Icon(Icons.lock),
-                border: OutlineInputBorder(),
-              ),
-              onSubmitted: (_) => _submit(),
-            ),
-            if (_error != null) ...[
-              const SizedBox(height: 10),
-              Text(_error!,
-                  style: TextStyle(
-                    color: _error!.contains('berhasil') ? Colors.green : Colors.red,
-                    fontSize: 12,
-                  )),
-            ],
-            const SizedBox(height: 4),
-            GestureDetector(
-              onTap: () => setState(() {
-                _isLogin = !_isLogin;
-                _error = null;
-              }),
-              child: Text(
-                _isLogin ? 'Belum punya akun? Register' : 'Sudah punya akun? Login',
-                style: const TextStyle(
-                  fontSize: 12,
-                  color: Colors.blue,
-                  decoration: TextDecoration.underline,
-                ),
-              ),
-            ),
-          ],
-        ),
-      ),
-      actions: [
-        TextButton(
-          onPressed: () => Navigator.pop(context),
-          child: const Text('Batal'),
-        ),
-        ElevatedButton(
-          onPressed: _loading ? null : _submit,
-          style: ElevatedButton.styleFrom(
-            backgroundColor: const Color(0xFF00C87A),
-            foregroundColor: Colors.black,
-          ),
-          child: _loading
-              ? const SizedBox(
-                  width: 18,
-                  height: 18,
-                  child: CircularProgressIndicator(strokeWidth: 2),
-                )
-              : Text(_isLogin ? 'LOGIN' : 'REGISTER'),
-        ),
-      ],
-    );
-  }
-}
