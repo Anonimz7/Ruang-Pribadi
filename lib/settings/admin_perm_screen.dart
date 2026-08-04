@@ -493,6 +493,7 @@ class _AdminPermScreenState extends State<AdminPermScreen> {
                         .where((a) => [
                               'news',
                               'stocks',
+                              'stock_list',
                               'ihsg_radar',
                               'reports'
                             ].contains(a))
