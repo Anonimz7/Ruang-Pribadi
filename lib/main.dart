@@ -1,6 +1,8 @@
 ﻿import 'dart:async';
+import 'dart:convert';
 import 'package:flutter/material.dart';
 import 'package:provider/provider.dart';
+import 'package:shared_preferences/shared_preferences.dart';
 import 'math_speed/math.dart';
 import 'services/api_client.dart';
 import 'services/apis.dart';
@@ -11,6 +13,9 @@ import 'widgets/app_drawer.dart';
 import 'widgets/login_dialog.dart';
 import 'widgets/update_dialog.dart';
 import 'video_downloader/screens/video_downloader_screen.dart';
+
+/// Top-level callback so child screens can restart the download badge poll.
+VoidCallback? onDownloadStarted;
 
 void main() {
   WidgetsFlutterBinding.ensureInitialized();
@@ -88,6 +93,7 @@ class _MainPageState extends State<MainPage> {
     // Register the session-expired callback so every 401 triggers
     // an automatic popup + logout.
     _client.onSessionExpired = _onSessionExpired;
+    onDownloadStarted = _startDownloadPolling;
     _init();
     _startDownloadPolling();
   }
@@ -96,15 +102,16 @@ class _MainPageState extends State<MainPage> {
   void dispose() {
     // Clean up callback when the widget is disposed
     _client.onSessionExpired = null;
+    onDownloadStarted = null;
     _downloadPollTimer?.cancel();
     super.dispose();
   }
 
-  // ── Poll active downloads every 5s ──
+  // ── Poll active downloads every 15s ──
   void _startDownloadPolling() {
     _downloadPollTimer?.cancel();
     _downloadPollTimer = Timer.periodic(
-      const Duration(seconds: 5),
+      const Duration(seconds: 15),
       (_) => _checkActiveDownloads(),
     );
     // Also check immediately
@@ -125,6 +132,12 @@ class _MainPageState extends State<MainPage> {
           final first = items.first;
           _activeDownloadProgress = (first['progress'] ?? 0).toDouble();
           _activeDownloadFilename = first['filename'] ?? '';
+        } else {
+          _activeDownloadProgress = 0;
+          _activeDownloadFilename = '';
+          // No active downloads — stop polling to save bandwidth
+          _downloadPollTimer?.cancel();
+          _downloadPollTimer = null;
         }
       });
     } catch (_) {}
@@ -139,8 +152,45 @@ class _MainPageState extends State<MainPage> {
     }
     setState(() => _loading = false);
 
+    // ── Auto-check persisted download on startup ──
+    _checkPersistedDownload();
+
     // ── Auto-check update on startup (non-blocking) ──
     _autoCheckUpdate();
+  }
+
+  /// Check if there's a persisted download from a previous session and
+  /// start polling immediately if it's still active on the server.
+  Future<void> _checkPersistedDownload() async {
+    if (!_client.isLoggedIn) return;
+    try {
+      final prefs = await SharedPreferences.getInstance();
+      final raw = prefs.getString('video_downloader_active');
+      if (raw == null) return;
+
+      final data = jsonDecode(raw) as Map<String, dynamic>;
+      final downloadId = data['download_id'] as String?;
+      if (downloadId == null) return;
+
+      // Verify with server if still active
+      final status = await VideoApi().downloadStatus(downloadId);
+      final st = status['status'] as String? ?? 'not_found';
+
+      if (!mounted) return;
+
+      if (st == 'downloading' || st == 'interrupted') {
+        // Still active — start badge polling immediately
+        setState(() {
+          _activeDownloadCount = 1;
+          _activeDownloadProgress = (status['progress'] ?? 0).toDouble();
+          _activeDownloadFilename = status['file_name'] ?? '';
+        });
+        _startDownloadPolling();
+      } else {
+        // Finished/failed while app was closed — clean up
+        await prefs.remove('video_downloader_active');
+      }
+    } catch (_) {}
   }
 
   void _autoCheckUpdate() async {

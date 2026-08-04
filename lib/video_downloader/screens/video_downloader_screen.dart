@@ -12,6 +12,7 @@ import '../../services/api_client.dart';
 import '../../services/api_config.dart';
 import 'download_history_screen.dart';
 import '../../settings/admin_cookies_screen.dart';
+import '../../main.dart' show onDownloadStarted;
 
 class VideoDownloaderScreen extends StatefulWidget {
   const VideoDownloaderScreen({super.key});
@@ -46,11 +47,11 @@ class _VideoDownloaderScreenState extends State<VideoDownloaderScreen> {
   bool _audioExpanded = true;
   List<Map<String, dynamic>> _activeDownloads = [];
 
-  // ── Poll active downloads every 3s so the card stays live ──
+  // ── Poll active downloads every 10s so the card stays live ──
   void _startActiveDownloadsPolling() {
     _activePollTimer?.cancel();
     _activePollTimer = Timer.periodic(
-      const Duration(seconds: 3),
+      const Duration(seconds: 10),
       (_) => _checkActiveDownloads(),
     );
   }
@@ -189,6 +190,8 @@ class _VideoDownloaderScreenState extends State<VideoDownloaderScreen> {
         });
         _startStatusPolling(downloadId);
         _connectProgressWebSocket();
+        // Notify main page to restart badge polling
+        onDownloadStarted?.call();
       } else if (st == 'completed') {
         // Download finished while app was closed
         await _clearDownloadState();
@@ -226,6 +229,11 @@ class _VideoDownloaderScreenState extends State<VideoDownloaderScreen> {
           data.map((e) => Map<String, dynamic>.from(e as Map)).toList();
       if (mounted) {
         setState(() => _activeDownloads = items);
+        // Stop polling when no active downloads to save bandwidth
+        if (items.isEmpty) {
+          _activePollTimer?.cancel();
+          _activePollTimer = null;
+        }
       }
     } catch (_) {}
   }
@@ -388,6 +396,10 @@ class _VideoDownloaderScreenState extends State<VideoDownloaderScreen> {
         await _saveDownloadState(downloadId, url, formatId, _audioOnly);
         // Start polling status endpoint as fallback
         _startStatusPolling(downloadId);
+        // Restart active downloads polling since we now have one
+        _startActiveDownloadsPolling();
+        // Notify main page to restart badge polling
+        onDownloadStarted?.call();
       }
 
       // The endpoint returns immediately now — the download runs in background.
@@ -411,7 +423,7 @@ class _VideoDownloaderScreenState extends State<VideoDownloaderScreen> {
   // ── Poll download status by ID (fallback when WS fails) ──
   void _startStatusPolling(String downloadId) {
     _pollTimer?.cancel();
-    _pollTimer = Timer.periodic(const Duration(seconds: 2), (_) async {
+    _pollTimer = Timer.periodic(const Duration(seconds: 10), (_) async {
       if (!_downloading || _downloadId == null) {
         _stopPolling();
         return;
