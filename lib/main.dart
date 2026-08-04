@@ -7,7 +7,6 @@ import 'services/apis.dart';
 import 'services/app_registry.dart';
 import 'services/dark_mode_service.dart';
 import 'widgets/app_drawer.dart';
-import 'widgets/login_screen.dart';
 import 'video_downloader/screens/video_downloader_screen.dart';
 
 void main() {
@@ -205,10 +204,15 @@ class _MainPageState extends State<MainPage> {
 
     // fitur lain = butuh login + permission
     if (!_client.isLoggedIn) {
-      return LoginScreen(onSuccess: () async {
-        await _client.loadSession();
-        setState(() {});
-      });
+      // Show login dialog popup instead of full page
+      Future.microtask(() => _showLoginDialog());
+      return _noAccess(AppDef(
+        key: app.key,
+        icon: app.icon,
+        label: app.label,
+        builder: app.builder,
+        section: app.section,
+      ));
     }
 
     if (_client.canAccess(app.key)) return app.builder(context);
@@ -344,6 +348,7 @@ class _LoginDialogState extends State<_LoginDialog> {
   final _passCtrl = TextEditingController();
   bool _loading = false;
   String? _error;
+  bool _isLogin = true; // true = login mode, false = register mode
 
   @override
   void dispose() {
@@ -358,9 +363,17 @@ class _LoginDialogState extends State<_LoginDialog> {
       _error = null;
     });
     try {
-      await AuthApi().login(_userCtrl.text.trim(), _passCtrl.text);
-      widget.onSuccess();
-      if (mounted) Navigator.pop(context);
+      if (_isLogin) {
+        await AuthApi().login(_userCtrl.text.trim(), _passCtrl.text);
+        widget.onSuccess();
+        if (mounted) Navigator.pop(context);
+      } else {
+        await AuthApi().register(_userCtrl.text.trim(), _passCtrl.text);
+        setState(() {
+          _isLogin = true;
+          _error = 'Registrasi berhasil! Silakan login.';
+        });
+      }
     } catch (e) {
       setState(() {
         _error = e.toString().replaceAll('Exception: ', '');
@@ -376,11 +389,11 @@ class _LoginDialogState extends State<_LoginDialog> {
   @override
   Widget build(BuildContext context) {
     return AlertDialog(
-      title: const Row(
+      title: Row(
         children: [
-          Icon(Icons.login, size: 24),
-          SizedBox(width: 8),
-          Text('Login'),
+          Icon(_isLogin ? Icons.login : Icons.person_add, size: 24),
+          const SizedBox(width: 8),
+          Text(_isLogin ? 'Login' : 'Register'),
         ],
       ),
       content: SizedBox(
@@ -410,8 +423,26 @@ class _LoginDialogState extends State<_LoginDialog> {
             if (_error != null) ...[
               const SizedBox(height: 10),
               Text(_error!,
-                  style: const TextStyle(color: Colors.red, fontSize: 12)),
+                  style: TextStyle(
+                    color: _error!.contains('berhasil') ? Colors.green : Colors.red,
+                    fontSize: 12,
+                  )),
             ],
+            const SizedBox(height: 4),
+            GestureDetector(
+              onTap: () => setState(() {
+                _isLogin = !_isLogin;
+                _error = null;
+              }),
+              child: Text(
+                _isLogin ? 'Belum punya akun? Register' : 'Sudah punya akun? Login',
+                style: const TextStyle(
+                  fontSize: 12,
+                  color: Colors.blue,
+                  decoration: TextDecoration.underline,
+                ),
+              ),
+            ),
           ],
         ),
       ),
@@ -432,7 +463,7 @@ class _LoginDialogState extends State<_LoginDialog> {
                   height: 18,
                   child: CircularProgressIndicator(strokeWidth: 2),
                 )
-              : const Text('LOGIN'),
+              : Text(_isLogin ? 'LOGIN' : 'REGISTER'),
         ),
       ],
     );

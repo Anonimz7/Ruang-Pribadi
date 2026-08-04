@@ -170,14 +170,17 @@ class ApiClient {
   dynamic _handle(http.Response r) {
     final body = jsonDecode(r.body);
     if (r.statusCode >= 200 && r.statusCode < 300) return body;
-    // ── 401 Unauthorized → session expired ──
+    // ── 401 Unauthorized ──
     if (r.statusCode == 401) {
-      // Fire the callback (auto-logout + popup) on the next frame so
-      // we don't break the current HTTP call stack.
-      if (onSessionExpired != null) {
+      // Only trigger session-expired flow when the user already has a token
+      // (i.e. an existing session expired). For login/register attempts
+      // (no token yet), just throw a regular error so the dialog can
+      // display the message (e.g. "Invalid credentials").
+      if (_token != null && onSessionExpired != null) {
         Future.microtask(() => onSessionExpired!());
+        throw const SessionExpiredException();
       }
-      throw const SessionExpiredException();
+      throw Exception(body['detail'] ?? 'Username atau password salah');
     }
     throw Exception(body['detail'] ?? 'Error ${r.statusCode}');
   }
