@@ -1,4 +1,4 @@
-import 'dart:async';
+﻿import 'dart:async';
 import 'package:flutter/material.dart';
 import 'package:provider/provider.dart';
 import 'math_speed/math.dart';
@@ -206,9 +206,9 @@ class _MainPageState extends State<MainPage> {
     // system (settings, profile) = selalu bisa
     if (app.section == 'system') return app.builder(context);
 
-    // admin section = owner only
+    // admin section = admin only
     if (app.section == 'admin') {
-      if (_client.tier == 'owner') return app.builder(context);
+      if (_client.tier == 'admin') return app.builder(context);
       return _noAccess(app);
     }
 

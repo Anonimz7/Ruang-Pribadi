@@ -1,4 +1,4 @@
-import 'dart:async';
+﻿import 'dart:async';
 import 'dart:convert';
 import 'dart:io';
 import 'package:http/http.dart' as http;
@@ -157,7 +157,7 @@ class StockApi {
   Future<Map<String, dynamic>> status() async =>
       (await _c.get('/idx/status')) as Map<String, dynamic>;
 
-  /// [POST /idx/upload] — Upload file XLSX (owner only)
+  /// [POST /idx/upload] — Upload file XLSX (admin only)
   Future<Map<String, dynamic>> upload(String filePath) async =>
       (await _c.multipartPost('/idx/upload', filePath, fieldName: 'file'))
           as Map<String, dynamic>;

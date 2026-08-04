@@ -109,7 +109,7 @@ class _ProfileScreenState extends State<ProfileScreen> {
     final isLoggedIn = _client.isLoggedIn;
     final username = _client.username;
     final tier = _client.tier;
-    final isOwner = tier == 'owner';
+    final isAdmin = tier == 'admin';
     final perms = _client.permissions;
 
     return Scaffold(
@@ -117,7 +117,7 @@ class _ProfileScreenState extends State<ProfileScreen> {
       body: SingleChildScrollView(
         padding: const EdgeInsets.all(16),
         child: isLoggedIn
-            ? _buildLoggedInView(username, isOwner, perms)
+            ? _buildLoggedInView(username, isAdmin, perms)
             : _buildLoggedOutView(context),
       ),
     );
@@ -170,7 +170,7 @@ class _ProfileScreenState extends State<ProfileScreen> {
 
   // ── Logged in ────────────────────────────────────────
   Widget _buildLoggedInView(
-      String username, bool isOwner, List<String> perms) {
+      String username, bool isAdmin, List<String> perms) {
     return Column(
       crossAxisAlignment: CrossAxisAlignment.start,
       children: [
@@ -183,7 +183,7 @@ class _ProfileScreenState extends State<ProfileScreen> {
                 CircleAvatar(
                   radius: 36,
                   backgroundColor:
-                      isOwner ? const Color(0xFF00C87A) : Colors.orange,
+                      isAdmin ? const Color(0xFF00C87A) : Colors.orange,
                   child: Text(
                     username.isNotEmpty ? username[0].toUpperCase() : '?',
                     style: const TextStyle(
@@ -201,16 +201,16 @@ class _ProfileScreenState extends State<ProfileScreen> {
                   padding:
                       const EdgeInsets.symmetric(horizontal: 12, vertical: 4),
                   decoration: BoxDecoration(
-                    color: isOwner
+                    color: isAdmin
                         ? const Color(0xFF00C87A).withValues(alpha: 0.15)
                         : Colors.orange.withValues(alpha: 0.15),
                     borderRadius: BorderRadius.circular(12),
                   ),
                   child: Text(
-                    isOwner ? '👑 OWNER' : '👤 GUEST',
+                    isAdmin ? '👑 ADMIN' : '👤 GUEST',
                     style: TextStyle(
                       color:
-                          isOwner ? const Color(0xFF00C87A) : Colors.orange,
+                          isAdmin ? const Color(0xFF00C87A) : Colors.orange,
                       fontWeight: FontWeight.bold,
                       fontSize: 12,
                     ),
@@ -233,7 +233,7 @@ class _ProfileScreenState extends State<ProfileScreen> {
         Card(
           child: Padding(
             padding: const EdgeInsets.all(16),
-            child: isOwner
+            child: isAdmin
                 ? const Row(
                     children: [
                       Icon(Icons.check_circle, color: Color(0xFF00C87A)),

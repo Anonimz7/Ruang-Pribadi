@@ -1,4 +1,4 @@
-import 'package:flutter/material.dart';
+﻿import 'package:flutter/material.dart';
 import '../services/apis.dart';
 
 /// Detail page for managing a single user's permissions and visibility.
@@ -62,7 +62,7 @@ class _AdminUserDetailScreenState extends State<AdminUserDetailScreen> {
     }
   }
 
-  bool get isOwner => widget.tier == 'owner';
+  bool get isAdmin => widget.tier == 'admin';
 
   // ─── Permission toggles ───────────────────────────────
 
@@ -163,7 +163,7 @@ class _AdminUserDetailScreenState extends State<AdminUserDetailScreen> {
       appBar: AppBar(
         title: Text(widget.username),
         actions: [
-          if (!isOwner)
+          if (!isAdmin)
             IconButton(
               icon: const Icon(Icons.delete_outline, color: Colors.red),
               onPressed: _deleteUser,
@@ -180,7 +180,7 @@ class _AdminUserDetailScreenState extends State<AdminUserDetailScreen> {
             _buildUserInfoCard(),
             const SizedBox(height: 16),
 
-            if (!isOwner) ...[
+            if (!isAdmin) ...[
               // ─── Quick Actions ─────────────────────
               _buildQuickActions(),
               const SizedBox(height: 20),
@@ -189,7 +189,7 @@ class _AdminUserDetailScreenState extends State<AdminUserDetailScreen> {
               ..._buildMenuSections(),
             ],
 
-            if (isOwner)
+            if (isAdmin)
               Container(
                 padding: const EdgeInsets.all(16),
                 decoration: BoxDecoration(
@@ -204,7 +204,7 @@ class _AdminUserDetailScreenState extends State<AdminUserDetailScreen> {
                     SizedBox(width: 12),
                     Expanded(
                       child: Text(
-                        'Owner memiliki akses penuh ke semua fitur. '
+                        'Admin memiliki akses penuh ke semua fitur. '
                         'Menu selalu tampil.',
                         style: TextStyle(fontSize: 13),
                       ),
@@ -219,7 +219,7 @@ class _AdminUserDetailScreenState extends State<AdminUserDetailScreen> {
   }
 
   Widget _buildUserInfoCard() {
-    final isOwner = widget.tier == 'owner';
+    final isAdmin = widget.tier == 'admin';
     return Card(
       child: Padding(
         padding: const EdgeInsets.all(16),
@@ -228,7 +228,7 @@ class _AdminUserDetailScreenState extends State<AdminUserDetailScreen> {
             CircleAvatar(
               radius: 28,
               backgroundColor:
-                  isOwner ? const Color(0xFF00C87A) : Colors.orange,
+                  isAdmin ? const Color(0xFF00C87A) : Colors.orange,
               child: Text(
                 widget.username[0].toUpperCase(),
                 style: const TextStyle(
@@ -250,18 +250,18 @@ class _AdminUserDetailScreenState extends State<AdminUserDetailScreen> {
                     padding:
                         const EdgeInsets.symmetric(horizontal: 8, vertical: 2),
                     decoration: BoxDecoration(
-                      color: isOwner
+                      color: isAdmin
                           ? const Color(0xFF00C87A).withValues(alpha: 0.15)
                           : Colors.orange.withValues(alpha: 0.15),
                       borderRadius: BorderRadius.circular(4),
                     ),
                     child: Text(
-                      isOwner ? 'OWNER' : 'GUEST',
+                      isAdmin ? 'admin' : 'guest',
                       style: TextStyle(
                         fontSize: 11,
                         fontWeight: FontWeight.bold,
                         color:
-                            isOwner ? const Color(0xFF00C87A) : Colors.orange,
+                            isAdmin ? const Color(0xFF00C87A) : Colors.orange,
                       ),
                     ),
                   ),

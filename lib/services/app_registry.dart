@@ -1,4 +1,4 @@
-import 'package:flutter/material.dart';
+﻿import 'package:flutter/material.dart';
 import '../bahasa_jepun/bahasa_jepun.dart';
 import '../math_speed/math.dart';
 import '../passwrod_generator/pasgen.dart';
@@ -135,7 +135,7 @@ final List<AppDef> appRegistry = [
     section: 'market',
   ),
 
-  // ─── Admin (owner only) ───────────────────────
+  // ─── Admin (admin only) ───────────────────────
   AppDef(
     key: 'admin_perms',
     icon: Icons.admin_panel_settings,

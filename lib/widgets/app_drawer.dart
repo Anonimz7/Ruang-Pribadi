@@ -1,4 +1,4 @@
-import 'package:flutter/material.dart';
+﻿import 'package:flutter/material.dart';
 import '../services/api_client.dart';
 import '../services/app_registry.dart';
 
@@ -22,10 +22,10 @@ class AppDrawer extends StatelessWidget {
   bool _isAccessible(AppDef app) {
     // system (settings, profile) = selalu bisa
     if (app.section == 'system') return true;
-    // Hidden menus = owner has hidden this from the user
+    // Hidden menus = admin has hidden this from the user
     if (client.isMenuHidden(app.key)) return false;
-    // admin section = owner only
-    if (app.section == 'admin') return client.tier == 'owner';
+    // admin section = admin only
+    if (app.section == 'admin') return client.tier == 'admin';
     // sisanya = butuh login + permission
     if (!client.isLoggedIn) return false;
     return client.canAccess(app.key);
@@ -133,7 +133,7 @@ class AppDrawer extends StatelessWidget {
           ],
 
           // ─── Admin ───────────────────────────
-          if (client.tier == 'owner') ...[
+          if (client.tier == 'admin') ...[
             const Divider(),
             const _SectionLabel('ADMIN'),
             ...adminApps.map((app) => _tile(context, app, locked: false)),

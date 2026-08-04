@@ -1,4 +1,4 @@
-import 'package:flutter/material.dart';
+﻿import 'package:flutter/material.dart';
 import 'package:fl_chart/fl_chart.dart';
 import 'package:intl/intl.dart';
 import '../../services/apis.dart';
@@ -262,9 +262,9 @@ class _StocksScreenState extends State<StocksScreen> {
 
   void _navigateToUpload() {
     final client = ApiClient();
-    if (client.tier != 'owner') {
+    if (client.tier != 'admin') {
       ScaffoldMessenger.of(context).showSnackBar(
-        const SnackBar(content: Text('Hanya owner yang bisa upload data')),
+        const SnackBar(content: Text('Hanya admin yang bisa upload data')),
       );
       return;
     }

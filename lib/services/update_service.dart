@@ -1,4 +1,4 @@
-import 'dart:convert';
+﻿import 'dart:convert';
 import 'package:http/http.dart' as http;
 import '../services/api_config.dart';
 import '../config/app_version.dart';
@@ -58,7 +58,7 @@ class UpdateService {
     return '${ApiConfig.baseUrl}${ApiConfig.prefix}$downloadUrl';
   }
 
-  /// Get update info from login response (owner only)
+  /// Get update info from login response (admin only)
   UpdateInfo? parseUpdateFromLogin(Map<String, dynamic> userData) {
     final updateData = userData['update'];
     if (updateData == null) return null;

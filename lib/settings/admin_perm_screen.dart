@@ -1,4 +1,4 @@
-import 'dart:async';
+﻿import 'dart:async';
 import 'package:flutter/material.dart';
 import 'admin_user_detail_screen.dart';
 import '../services/apis.dart';
@@ -116,7 +116,7 @@ class _AdminPermScreenState extends State<AdminPermScreen> {
                 value: selectedTier,
                 items: const [
                   DropdownMenuItem(value: 'guest', child: Text('Guest')),
-                  DropdownMenuItem(value: 'owner', child: Text('Owner')),
+                  DropdownMenuItem(value: 'admin', child: Text('Admin')),
                 ],
                 onChanged: (v) {
                   if (v != null) setDialogState(() => selectedTier = v);
@@ -166,7 +166,7 @@ class _AdminPermScreenState extends State<AdminPermScreen> {
     if (username == 'xoot') {
       if (mounted) {
         ScaffoldMessenger.of(context).showSnackBar(
-            const SnackBar(content: Text('Tidak bisa menghapus owner utama')));
+            const SnackBar(content: Text('Tidak bisa menghapus admin utama')));
       }
       return;
     }
@@ -312,7 +312,7 @@ class _AdminPermScreenState extends State<AdminPermScreen> {
   }
 
   Widget _buildUserCard(dynamic user) {
-    final isOwner = user['tier'] == 'owner';
+    final isAdmin = user['tier'] == 'admin';
     final perms = List<String>.from(user['permissions'] ?? []);
     final username = user['username'] ?? '';
     final userId = user['id'];
@@ -323,7 +323,7 @@ class _AdminPermScreenState extends State<AdminPermScreen> {
         contentPadding: const EdgeInsets.symmetric(horizontal: 16, vertical: 8),
         leading: CircleAvatar(
           radius: 22,
-          backgroundColor: isOwner ? const Color(0xFF00C87A) : Colors.orange,
+          backgroundColor: isAdmin ? const Color(0xFF00C87A) : Colors.orange,
           child: Text(username[0].toUpperCase(),
               style: const TextStyle(
                   color: Colors.white,
@@ -339,24 +339,24 @@ class _AdminPermScreenState extends State<AdminPermScreen> {
             Container(
               padding: const EdgeInsets.symmetric(horizontal: 6, vertical: 2),
               decoration: BoxDecoration(
-                color: isOwner
+                color: isAdmin
                     ? const Color(0xFF00C87A).withValues(alpha: 0.15)
                     : Colors.orange.withValues(alpha: 0.15),
                 borderRadius: BorderRadius.circular(4),
               ),
               child: Text(
-                isOwner ? 'OWNER' : 'GUEST',
+                isAdmin ? 'admin' : 'guest',
                 style: TextStyle(
                   fontSize: 10,
                   fontWeight: FontWeight.bold,
-                  color: isOwner ? const Color(0xFF00C87A) : Colors.orange,
+                  color: isAdmin ? const Color(0xFF00C87A) : Colors.orange,
                 ),
               ),
             ),
           ],
         ),
         subtitle: Text(
-          isOwner
+          isAdmin
               ? 'Akses penuh'
               : '${perms.length} / ${_allApps.length} fitur diizinkan',
           style: const TextStyle(fontSize: 12, color: Colors.grey),
@@ -364,7 +364,7 @@ class _AdminPermScreenState extends State<AdminPermScreen> {
         trailing: Row(
           mainAxisSize: MainAxisSize.min,
           children: [
-            if (!isOwner)
+            if (!isAdmin)
               IconButton(
                 icon: const Icon(Icons.delete_outline,
                     size: 20, color: Colors.red),

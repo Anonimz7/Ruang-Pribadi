@@ -42,7 +42,7 @@ class ApiClient {
   }
 
   bool canAccess(String appKey) {
-    if (_tier == 'owner') return true;
+    if (_tier == 'admin') return true;
     return _permissions.contains(appKey);
   }
 
