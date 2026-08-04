@@ -139,7 +139,7 @@ class AppDrawer extends StatelessWidget {
     );
   }
 
-  Widget _tile(BuildContext context, AppDef app, {required bool locked}) {
+  Widget _tile(BuildContext context, AppDef app, {bool locked = false}) {
     final idx = appRegistry.indexOf(app);
     final isSelected = selectedIndex == idx;
 
