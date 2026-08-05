@@ -1,3 +1,5 @@
+import 'dart:async';
+
 import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
 import '../../services/apis.dart';
@@ -29,11 +31,11 @@ class _StockListScreenState extends State<StockListScreen> {
   bool _hasMore = true;
   String? _error;
 
-  // ── Filter state ──
+  // ── Filter state (server-side) ──
   Set<String> _sectors = {};
   String _selectedSector = '';
-  bool _filterActive = false;
-  List<StockListItem> _displayed = [];
+  String _query = '';
+  Timer? _debounce;
 
   @override
   void initState() {
@@ -44,6 +46,7 @@ class _StockListScreenState extends State<StockListScreen> {
 
   @override
   void dispose() {
+    _debounce?.cancel();
     _searchCtrl.dispose();
     _scrollCtrl.dispose();
     super.dispose();
@@ -60,7 +63,12 @@ class _StockListScreenState extends State<StockListScreen> {
       _hasMore = true;
     });
     try {
-      final res = await _api.stockList(limit: _pageSize, offset: 0);
+      final res = await _api.stockList(
+        limit: _pageSize,
+        offset: 0,
+        q: _query,
+        sector: _selectedSector,
+      );
       final sectors = res.stocks
           .map((s) => s.sector)
           .whereType<String>()
@@ -74,8 +82,11 @@ class _StockListScreenState extends State<StockListScreen> {
           _hasMore = _stocks.length < res.total;
           _sectors = sectors;
           _loadingFirst = false;
-          _applyFilter();
         });
+        // Scroll back to top when filters change
+        if (_scrollCtrl.hasClients) {
+          _scrollCtrl.jumpTo(0);
+        }
       }
     } catch (e) {
       if (mounted) {
@@ -91,7 +102,12 @@ class _StockListScreenState extends State<StockListScreen> {
     if (_loadingMore || !_hasMore) return;
     setState(() => _loadingMore = true);
     try {
-      final res = await _api.stockList(limit: _pageSize, offset: _offset);
+      final res = await _api.stockList(
+        limit: _pageSize,
+        offset: _offset,
+        q: _query,
+        sector: _selectedSector,
+      );
       if (mounted) {
         setState(() {
           _stocks.addAll(res.stocks);
@@ -99,7 +115,6 @@ class _StockListScreenState extends State<StockListScreen> {
           _hasMore = _offset < res.total;
           _total = res.total;
           _loadingMore = false;
-          _applyFilter();
         });
       }
     } catch (_) {
@@ -114,22 +129,22 @@ class _StockListScreenState extends State<StockListScreen> {
     }
   }
 
-  // ── Filtering ────────────────────────────────────────────────────────────
+  // ── Filtering (server-side) ──────────────────────────────────────────────
 
-  void _applyFilter() {
-    final q = _searchCtrl.text.trim().toLowerCase();
-    _filterActive = q.isNotEmpty || _selectedSector.isNotEmpty;
-    setState(() {
-      _displayed = _stocks.where((s) {
-        final matchSector =
-            _selectedSector.isEmpty || s.sector == _selectedSector;
-        final matchQuery = q.isEmpty ||
-            s.ticker.toLowerCase().contains(q) ||
-            s.companyName.toLowerCase().contains(q);
-        return matchSector && matchQuery;
-      }).toList();
+  void _onSearchChanged(String value) {
+    _debounce?.cancel();
+    _debounce = Timer(const Duration(milliseconds: 350), () {
+      _query = value.trim();
+      _loadFirstPage();
     });
   }
+
+  void _onSectorChanged(String? value) {
+    _selectedSector = value ?? '';
+    _loadFirstPage();
+  }
+
+  bool get _filterActive => _query.isNotEmpty || _selectedSector.isNotEmpty;
 
   // ── Navigation ───────────────────────────────────────────────────────────
 
@@ -183,7 +198,8 @@ class _StockListScreenState extends State<StockListScreen> {
                             icon: const Icon(Icons.clear, size: 18),
                             onPressed: () {
                               _searchCtrl.clear();
-                              _applyFilter();
+                              _query = '';
+                              _loadFirstPage();
                             },
                           )
                         : null,
@@ -194,7 +210,7 @@ class _StockListScreenState extends State<StockListScreen> {
                     contentPadding: const EdgeInsets.symmetric(
                         horizontal: 12, vertical: 10),
                   ),
-                  onChanged: (_) => _applyFilter(),
+                  onChanged: _onSearchChanged,
                 ),
                 const SizedBox(height: 8),
                 // Sector filter
@@ -228,10 +244,7 @@ class _StockListScreenState extends State<StockListScreen> {
                                     style: const TextStyle(fontSize: 12)),
                               )),
                         ],
-                        onChanged: (v) {
-                          _selectedSector = v ?? '';
-                          _applyFilter();
-                        },
+                        onChanged: _onSectorChanged,
                       ),
                     ),
                   ],
@@ -248,7 +261,7 @@ class _StockListScreenState extends State<StockListScreen> {
                 children: [
                   Text(
                     _filterActive
-                        ? 'Menampilkan ${_displayed.length} dari $_total saham'
+                        ? 'Menampilkan $_total saham (filter aktif)'
                         : '$_total saham total — halaman ${(_offset / _pageSize).ceil()}',
                     style:
                         TextStyle(fontSize: 11, color: colors.onSurfaceVariant),
@@ -260,7 +273,7 @@ class _StockListScreenState extends State<StockListScreen> {
                     GestureDetector(
                       onTap: () {
                         _selectedSector = '';
-                        _applyFilter();
+                        _loadFirstPage();
                       },
                       child: Icon(Icons.close,
                           size: 14, color: colors.onSurfaceVariant),
@@ -293,15 +306,15 @@ class _StockListScreenState extends State<StockListScreen> {
                           ],
                         ),
                       )
-                    : _displayed.isEmpty
+                    : _stocks.isEmpty
                         ? const Center(
                             child: Text('Tidak ada saham ditemukan',
                                 style: TextStyle(color: Colors.grey)))
                         : ListView.builder(
                             controller: _scrollCtrl,
-                            itemCount: _displayed.length + (_hasMore ? 1 : 0),
+                            itemCount: _stocks.length + (_hasMore ? 1 : 0),
                             itemBuilder: (_, i) {
-                              if (i == _displayed.length) {
+                              if (i == _stocks.length) {
                                 return const Padding(
                                   padding: EdgeInsets.all(16),
                                   child: Center(
@@ -309,7 +322,7 @@ class _StockListScreenState extends State<StockListScreen> {
                                           strokeWidth: 2)),
                                 );
                               }
-                              final stock = _displayed[i];
+                              final stock = _stocks[i];
                               return _StockListTile(
                                 stock: stock,
                                 onTap: () => _openAnalysis(stock.ticker),

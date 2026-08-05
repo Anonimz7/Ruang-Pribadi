@@ -115,10 +115,20 @@ class StockApi {
   /// final res = await api.stockList(limit: 100, offset: 0);
   /// print('${res.total} saham total, showing ${res.stocks.length}');
   /// ```
-  Future<StockListResponse> stockList({int limit = 100, int offset = 0}) async {
+  ///
+  /// [q] filters by ticker/name (server-side), [sector] filters by sector
+  /// (server-side) — both combined with pagination so the total is accurate.
+  Future<StockListResponse> stockList({
+    int limit = 100,
+    int offset = 0,
+    String q = '',
+    String sector = '',
+  }) async {
     final r = await _c.get('/idx/stocks', {
       'limit': '$limit',
       'offset': '$offset',
+      if (q.isNotEmpty) 'q': q,
+      if (sector.isNotEmpty) 'sector': sector,
     });
     return StockListResponse.fromJson(r as Map<String, dynamic>);
   }
