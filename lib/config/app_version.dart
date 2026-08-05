@@ -5,6 +5,6 @@
 ///   1.1.0 → 2
 ///   2.0.0 → 3
 class AppVersion {
-  static const int code = 12;
-  static const String name = '2.1.0'; ///
+  static const int code = 13;
+  static const String name = '2.2.0'; ///
 }
