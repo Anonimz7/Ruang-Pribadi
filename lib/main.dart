@@ -95,7 +95,6 @@ class _MainPageState extends State<MainPage> {
     _client.onSessionExpired = _onSessionExpired;
     onDownloadStarted = _startDownloadPolling;
     _init();
-    _startDownloadPolling();
   }
 
   @override
@@ -152,8 +151,14 @@ class _MainPageState extends State<MainPage> {
     }
     setState(() => _loading = false);
 
-    // ── Auto-check persisted download on startup ──
-    _checkPersistedDownload();
+    // ── Auto-check persisted download on startup (only after session loaded) ──
+    await _checkPersistedDownload();
+
+    // If no active download found, do one initial check then keep polling
+    // so newly-started downloads (e.g. from another device) still appear.
+    if (_downloadPollTimer == null) {
+      _startDownloadPolling();
+    }
 
     // ── Auto-check update on startup (non-blocking) ──
     _autoCheckUpdate();
