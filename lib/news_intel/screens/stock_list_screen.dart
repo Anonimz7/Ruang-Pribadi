@@ -1,7 +1,6 @@
 import 'dart:async';
 
 import 'package:flutter/material.dart';
-import 'package:flutter/services.dart';
 import '../../services/apis.dart';
 import '../models/stock_models.dart';
 import '../../widgets/stock_widgets.dart';
@@ -33,7 +32,11 @@ class _StockListScreenState extends State<StockListScreen> {
 
   // ── Filter state (server-side) ──
   Set<String> _sectors = {};
+  Set<String> _primarySectors = {};
+  Set<String> _subSectors = {};
   String _selectedSector = '';
+  String _selectedPrimary = '';
+  String _selectedSub = '';
   String _query = '';
   Timer? _debounce;
 
@@ -68,6 +71,8 @@ class _StockListScreenState extends State<StockListScreen> {
         offset: 0,
         q: _query,
         sector: _selectedSector,
+        primarySector: _selectedPrimary,
+        subSector: _selectedSub,
       );
       final sectors = res.stocks
           .map((s) => s.sector)
@@ -107,6 +112,8 @@ class _StockListScreenState extends State<StockListScreen> {
         offset: _offset,
         q: _query,
         sector: _selectedSector,
+        primarySector: _selectedPrimary,
+        subSector: _selectedSub,
       );
       if (mounted) {
         setState(() {
@@ -139,12 +146,95 @@ class _StockListScreenState extends State<StockListScreen> {
     });
   }
 
-  void _onSectorChanged(String? value) {
+  // ── Cascading sector filters ────────────────────────────────────────────
+  // Selecting a parent resets all children below it (their old choices may
+  // not exist under the new parent) and refetches child options from the API.
+
+  Future<void> _onSectorChanged(String? value) async {
     _selectedSector = value ?? '';
+    _selectedPrimary = '';
+    _selectedSub = '';
+    _primarySectors = {};
+    _subSectors = {};
+    if (_selectedSector.isNotEmpty) {
+      final opts = await _api.sectorOptions(sector: _selectedSector);
+      if (mounted) {
+        setState(() => _primarySectors = opts.toSet());
+      }
+    }
     _loadFirstPage();
   }
 
-  bool get _filterActive => _query.isNotEmpty || _selectedSector.isNotEmpty;
+  Future<void> _onPrimaryChanged(String? value) async {
+    _selectedPrimary = value ?? '';
+    _selectedSub = '';
+    _subSectors = {};
+    if (_selectedPrimary.isNotEmpty) {
+      final opts = await _api.sectorOptions(
+        sector: _selectedSector,
+        primarySector: _selectedPrimary,
+      );
+      if (mounted) {
+        setState(() => _subSectors = opts.toSet());
+      }
+    }
+    _loadFirstPage();
+  }
+
+  void _onSubChanged(String? value) {
+    _selectedSub = value ?? '';
+    _loadFirstPage();
+  }
+
+  void _resetSectorFilters() {
+    _selectedSector = '';
+    _selectedPrimary = '';
+    _selectedSub = '';
+    _primarySectors = {};
+    _subSectors = {};
+    _loadFirstPage();
+  }
+
+  bool get _filterActive =>
+      _query.isNotEmpty ||
+      _selectedSector.isNotEmpty ||
+      _selectedPrimary.isNotEmpty ||
+      _selectedSub.isNotEmpty;
+
+  /// Reusable cascading sector dropdown. Disabled (greyed) when the parent
+  /// level isn't chosen yet.
+  Widget _sectorDropdown({
+    required String value,
+    required String hint,
+    required Set<String> items,
+    required ValueChanged<String?> onChanged,
+    bool enabled = true,
+  }) {
+    final colors = Theme.of(context).colorScheme;
+    final opacity = enabled ? 1.0 : 0.45;
+    return Opacity(
+      opacity: opacity,
+      child: DropdownButton<String>(
+        value: value.isEmpty ? null : value,
+        hint: Text(hint,
+            style: TextStyle(fontSize: 12, color: colors.onSurfaceVariant)),
+        isDense: true,
+        isExpanded: true,
+        underline: const SizedBox.shrink(),
+        items: [
+          const DropdownMenuItem<String>(
+            value: '',
+            child: Text('Semua', style: TextStyle(fontSize: 12)),
+          ),
+          ...items.map((item) => DropdownMenuItem<String>(
+                value: item,
+                child: Text(item, style: const TextStyle(fontSize: 12)),
+              )),
+        ],
+        onChanged: enabled ? onChanged : null,
+      ),
+    );
+  }
 
   // ── Navigation ───────────────────────────────────────────────────────────
 
@@ -213,7 +303,9 @@ class _StockListScreenState extends State<StockListScreen> {
                   onChanged: _onSearchChanged,
                 ),
                 const SizedBox(height: 8),
-                // Sector filter
+                // Sector filters — cascading: Sektor → Sub Sektor Primer →
+                // Sub Sektor. Lower levels are disabled until their parent
+                // is chosen, and reset when the parent changes.
                 Row(
                   children: [
                     Icon(Icons.filter_list,
@@ -224,31 +316,59 @@ class _StockListScreenState extends State<StockListScreen> {
                             fontSize: 12, color: colors.onSurfaceVariant)),
                     const SizedBox(width: 8),
                     Expanded(
-                      child: DropdownButton<String>(
-                        value: _selectedSector.isEmpty ? null : _selectedSector,
-                        hint: Text('Semua',
-                            style: TextStyle(
-                                fontSize: 12, color: colors.onSurfaceVariant)),
-                        isDense: true,
-                        isExpanded: true,
-                        underline: const SizedBox.shrink(),
-                        items: [
-                          const DropdownMenuItem<String>(
-                            value: '',
-                            child: Text('Semua Sektor',
-                                style: TextStyle(fontSize: 12)),
-                          ),
-                          ..._sectors.map((sec) => DropdownMenuItem<String>(
-                                value: sec,
-                                child: Text(sec,
-                                    style: const TextStyle(fontSize: 12)),
-                              )),
-                        ],
+                      child: _sectorDropdown(
+                        value: _selectedSector,
+                        hint: 'Semua',
+                        items: _sectors,
                         onChanged: _onSectorChanged,
                       ),
                     ),
                   ],
                 ),
+                const SizedBox(height: 8),
+                Row(
+                  children: [
+                    const SizedBox(width: 20),
+                    Expanded(
+                      child: _sectorDropdown(
+                        value: _selectedPrimary,
+                        hint: 'Sub Sektor Primer',
+                        items: _primarySectors,
+                        enabled: _selectedSector.isNotEmpty,
+                        onChanged: _onPrimaryChanged,
+                      ),
+                    ),
+                    const SizedBox(width: 8),
+                    Expanded(
+                      child: _sectorDropdown(
+                        value: _selectedSub,
+                        hint: 'Sub Sektor',
+                        items: _subSectors,
+                        enabled: _selectedPrimary.isNotEmpty,
+                        onChanged: _onSubChanged,
+                      ),
+                    ),
+                  ],
+                ),
+                if (_selectedSector.isNotEmpty)
+                  Padding(
+                    padding: const EdgeInsets.only(top: 6),
+                    child: Align(
+                      alignment: Alignment.centerRight,
+                      child: TextButton.icon(
+                        onPressed: _resetSectorFilters,
+                        icon: const Icon(Icons.close, size: 14),
+                        label: const Text('Reset Filter',
+                            style: TextStyle(fontSize: 11)),
+                        style: TextButton.styleFrom(
+                          padding: const EdgeInsets.symmetric(
+                              horizontal: 8, vertical: 0),
+                          minimumSize: Size.zero,
+                          tapTargetSize: MaterialTapTargetSize.shrinkWrap,
+                        ),
+                      ),
+                    ),
+                  ),
               ],
             ),
           ),
@@ -269,12 +389,19 @@ class _StockListScreenState extends State<StockListScreen> {
                   if (_selectedSector.isNotEmpty) ...[
                     const SizedBox(width: 8),
                     StockSectorBadge(label: _selectedSector, small: true),
+                  ],
+                  if (_selectedPrimary.isNotEmpty) ...[
+                    const SizedBox(width: 4),
+                    StockSectorBadge(label: _selectedPrimary, small: true),
+                  ],
+                  if (_selectedSub.isNotEmpty) ...[
+                    const SizedBox(width: 4),
+                    StockSectorBadge(label: _selectedSub, small: true),
+                  ],
+                  if (_selectedSector.isNotEmpty) ...[
                     const SizedBox(width: 4),
                     GestureDetector(
-                      onTap: () {
-                        _selectedSector = '';
-                        _loadFirstPage();
-                      },
+                      onTap: _resetSectorFilters,
                       child: Icon(Icons.close,
                           size: 14, color: colors.onSurfaceVariant),
                     ),

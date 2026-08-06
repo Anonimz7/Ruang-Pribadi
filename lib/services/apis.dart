@@ -116,21 +116,41 @@ class StockApi {
   /// print('${res.total} saham total, showing ${res.stocks.length}');
   /// ```
   ///
-  /// [q] filters by ticker/name (server-side), [sector] filters by sector
-  /// (server-side) — both combined with pagination so the total is accurate.
+  /// [q] filters by ticker/name (server-side), [sector], [primarySector] and
+  /// [subSector] cascade as a 3-level sector filter (server-side) — all
+  /// combined with pagination so the total is accurate.
   Future<StockListResponse> stockList({
     int limit = 100,
     int offset = 0,
     String q = '',
     String sector = '',
+    String primarySector = '',
+    String subSector = '',
   }) async {
     final r = await _c.get('/idx/stocks', {
       'limit': '$limit',
       'offset': '$offset',
       if (q.isNotEmpty) 'q': q,
       if (sector.isNotEmpty) 'sector': sector,
+      if (primarySector.isNotEmpty) 'primary_sector': primarySector,
+      if (subSector.isNotEmpty) 'sub_sector': subSector,
     });
     return StockListResponse.fromJson(r as Map<String, dynamic>);
+  }
+
+  /// [GET /idx/sectors] — cascading sector filter options.
+  ///
+  /// No params → all sectors. `sector:` → primary sub-sectors under it.
+  /// `sector:` + `primarySector:` → sub-sectors under that pair.
+  Future<List<String>> sectorOptions({
+    String sector = '',
+    String primarySector = '',
+  }) async {
+    final r = await _c.get('/idx/sectors', {
+      if (sector.isNotEmpty) 'sector': sector,
+      if (primarySector.isNotEmpty) 'primary_sector': primarySector,
+    });
+    return (r as List?)?.map((e) => '$e').toList() ?? [];
   }
 
   /// Detail profile satu saham — returns typed [StockProfile].
