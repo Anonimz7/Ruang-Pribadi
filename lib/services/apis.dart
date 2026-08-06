@@ -103,8 +103,10 @@ class StockApi {
   /// Search saham by ticker atau nama — returns typed [StockListItem] list.
   Future<List<StockListItem>> searchTyped(String q) async {
     final r = await _c.get('/idx/stocks', {'q': q});
-    if (r is! List) return [];
-    return r
+    // Endpoint returns {total, stocks}; extract the list.
+    final list = r is List ? r : (r as Map<String, dynamic>)['stocks'];
+    if (list is! List) return [];
+    return list
         .map((e) => StockListItem.fromJson(e as Map<String, dynamic>))
         .toList();
   }
