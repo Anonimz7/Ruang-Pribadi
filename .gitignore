@@ -1,39 +1,37 @@
 ```
-# Build artifacts
-*.pyc
-__pycache__/
-*.o
-*.obj
-*.exe
-*.dll
-*.so
-*.a
-*.out
-
 # Dependencies
-node_modules/
-venv/
-.venv/
+.dart_tool/
+.packages
+.pub/
+pubspec.lock
+
+# Build outputs
+build/
+dist/
+
+# Logs
+*.log
+*.tmp
+
+# Environment
 .env
 .env.local
-.env.*
+*.env.*
 
-# IDE and editor files
+# IDE
 .vscode/
 .idea/
 *.swp
 *.swo
-*.tmp
 
-# Logs and coverage
-*.log
+# OS
+.DS_Store
+Thumbs.db
+
+# Coverage
 coverage/
 htmlcov/
 .coverage
-
-# System files
-.DS_Store
-Thumbs.db
 
 # Compressed files
 *.zip
