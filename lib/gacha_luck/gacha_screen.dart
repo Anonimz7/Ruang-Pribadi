@@ -105,13 +105,23 @@ class _GachaLuckScreenState extends State<GachaLuckScreen>
   }
 
   /// Baca hasil dari posisi akhir roda (di mana pun ia berhenti)
+  /// Jarum statis ada di posisi jam 12 (270° dalam sistem koordinat Canvas)
+  /// Sektor 0 dimulai dari sudut 0° (jam 3) dan berputar CW
+  /// Ketika roda berputar sebesar angleDeg CW, sektor yang berada di bawah jarum
+  /// dapat dihitung dengan mencari sektor mana yang mencakup sudut 270° setelah rotasi
   LuckTier _resultFromAngle(double angleDeg) {
     final n = LuckTier.values.length;
     final sectorAngle = 360 / n;
+    // Normalisasi sudut ke [0, 360)
     final normalized = ((angleDeg % 360) + 360) % 360;
-    final sectorIndex = ((normalized - 270 + sectorAngle / 2) / sectorAngle)
-            .floor() %
-        n;
+    // Setelah roda berputar `normalized` derajat CW, 
+    // titik yang awalnya di sudut `theta` sekarang ada di `theta + normalized`
+    // Kita ingin tahu sektor mana yang sekarang berada di posisi 270° (jam 12)
+    // Sektor i mencakup sudut [i*sectorAngle, (i+1)*sectorAngle) sebelum rotasi
+    // Setelah rotasi, sektor i mencakup [(i*sectorAngle - normalized), ...)
+    // Untuk menemukan sektor di posisi 270°, kita hitung:
+    // sectorIndex = floor((270 - normalized) / sectorAngle) mod n
+    var sectorIndex = (((270 - normalized) % 360 + 360) % 360 / sectorAngle).floor() % n;
     return LuckTier.values[sectorIndex];
   }
 

@@ -70,7 +70,9 @@ class _RollingScreenState extends State<RollingScreen>
     final sectorAngle = 360 / n;
     // Jarum statis di atas (270°). Sektor di bawah jarum:
     final normalized = ((angleDeg % 360) + 360) % 360;
-    final sectorIndex = ((normalized - 270 + sectorAngle / 2) / sectorAngle)
+    // Hitung sektor yang berada di posisi 270° (jarum di atas)
+    // Roda berputar searah jarum jam, jadi sektor yang melewati jarum adalah (270 - normalized)
+    final sectorIndex = (((270 - normalized) % 360 + 360) % 360 / sectorAngle)
             .floor() %
         n;
     return sectorIndex.isEven ? YesNo.yes : YesNo.no;
