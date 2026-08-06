@@ -90,133 +90,145 @@ class _IdxUploadScreenState extends State<IdxUploadScreen> {
   @override
   Widget build(BuildContext context) {
     return Scaffold(
-      appBar: AppBar(
-        title: const Text('Upload Data IDX'),
-        actions: [
-          IconButton(
-            onPressed: _loadStatus,
-            icon: const Icon(Icons.refresh),
-            tooltip: 'Refresh Status',
-          ),
-        ],
-      ),
-      body: SingleChildScrollView(
-        padding: const EdgeInsets.all(16.0),
+      body: SafeArea(
         child: Column(
-          crossAxisAlignment: CrossAxisAlignment.stretch,
           children: [
-            // ── Status IDX ──
-            _buildStatusCard(),
-            const SizedBox(height: 16),
+            // Back button + title (AppBar-less clean style)
+            Expanded(
+              child: RefreshIndicator(
+                onRefresh: _loadStatus,
+                child: SingleChildScrollView(
+                  physics: const AlwaysScrollableScrollPhysics(),
+                  padding: const EdgeInsets.all(16.0),
+                  child: Column(
+                    crossAxisAlignment: CrossAxisAlignment.stretch,
+                    children: [
+                      // ── Status IDX ──
+                      _buildStatusCard(),
+                      const SizedBox(height: 16),
 
-            // ── Info card ──
-            Card(
-              color: Theme.of(context).colorScheme.secondaryContainer,
-              child: Padding(
-                padding: const EdgeInsets.all(12.0),
-                child: Column(
-                  crossAxisAlignment: CrossAxisAlignment.start,
-                  children: [
-                    Text(
-                      '📁 Format File',
-                      style: TextStyle(
-                        fontWeight: FontWeight.bold,
-                        color:
-                            Theme.of(context).colorScheme.onSecondaryContainer,
+                      // ── Info card ──
+                      Card(
+                        color: Theme.of(context).colorScheme.secondaryContainer,
+                        child: Padding(
+                          padding: const EdgeInsets.all(12.0),
+                          child: Column(
+                            crossAxisAlignment: CrossAxisAlignment.start,
+                            children: [
+                              Text(
+                                '📁 Format File',
+                                style: TextStyle(
+                                  fontWeight: FontWeight.bold,
+                                  color: Theme.of(context)
+                                      .colorScheme
+                                      .onSecondaryContainer,
+                                ),
+                              ),
+                              const SizedBox(height: 8),
+                              Text('• File harus berformat .xlsx (Excel)',
+                                  style: TextStyle(
+                                      color: Theme.of(context)
+                                          .colorScheme
+                                          .onSecondaryContainer)),
+                              Text(
+                                  '• Nama file harus mengandung tanggal YYYYMMDD',
+                                  style: TextStyle(
+                                      color: Theme.of(context)
+                                          .colorScheme
+                                          .onSecondaryContainer)),
+                              Text('• Contoh: 20240115_idx_data.xlsx',
+                                  style: TextStyle(
+                                      color: Theme.of(context)
+                                          .colorScheme
+                                          .onSecondaryContainer)),
+                            ],
+                          ),
+                        ),
                       ),
-                    ),
-                    const SizedBox(height: 8),
-                    Text('• File harus berformat .xlsx (Excel)',
-                        style: TextStyle(
+                      const SizedBox(height: 20),
+
+                      // ── File picker button ──
+                      ElevatedButton.icon(
+                        onPressed: _uploading ? null : _pickFile,
+                        icon: const Icon(Icons.upload_file),
+                        label: const Text('Pilih File Excel'),
+                        style: ElevatedButton.styleFrom(
+                          backgroundColor: const Color(0xFF00C87A),
+                          padding: const EdgeInsets.symmetric(vertical: 16),
+                        ),
+                      ),
+                      const SizedBox(height: 12),
+
+                      // ── Selected file display ──
+                      if (_selectedFile != null)
+                        Container(
+                          padding: const EdgeInsets.all(12),
+                          decoration: BoxDecoration(
                             color: Theme.of(context)
                                 .colorScheme
-                                .onSecondaryContainer)),
-                    Text('• Nama file harus mengandung tanggal YYYYMMDD',
-                        style: TextStyle(
-                            color: Theme.of(context)
-                                .colorScheme
-                                .onSecondaryContainer)),
-                    Text('• Contoh: 20240115_idx_data.xlsx',
-                        style: TextStyle(
-                            color: Theme.of(context)
-                                .colorScheme
-                                .onSecondaryContainer)),
-                  ],
+                                .surfaceContainerHighest,
+                            borderRadius: BorderRadius.circular(8),
+                            border: Border.all(
+                                color: Theme.of(context).colorScheme.outline),
+                          ),
+                          child: Row(
+                            children: [
+                              Icon(Icons.insert_drive_file,
+                                  color: Theme.of(context).colorScheme.primary),
+                              const SizedBox(width: 8),
+                              Expanded(
+                                child: Text(
+                                  _selectedFile!.split('/').last,
+                                  style: const TextStyle(
+                                      fontWeight: FontWeight.w500),
+                                  overflow: TextOverflow.ellipsis,
+                                ),
+                              ),
+                              IconButton(
+                                onPressed: _uploading
+                                    ? null
+                                    : () =>
+                                        setState(() => _selectedFile = null),
+                                icon: const Icon(Icons.close, size: 20),
+                              ),
+                            ],
+                          ),
+                        ),
+
+                      const SizedBox(height: 20),
+
+                      // ── Upload button ──
+                      ElevatedButton.icon(
+                        onPressed: _selectedFile == null || _uploading
+                            ? null
+                            : _upload,
+                        icon: _uploading
+                            ? const SizedBox(
+                                width: 16,
+                                height: 16,
+                                child: CircularProgressIndicator(
+                                  strokeWidth: 2,
+                                  color: Colors.white,
+                                ),
+                              )
+                            : const Icon(Icons.cloud_upload),
+                        label: Text(
+                            _uploading ? 'Mengunggah...' : 'Upload ke Server'),
+                        style: ElevatedButton.styleFrom(
+                          backgroundColor: Colors.blue,
+                          padding: const EdgeInsets.symmetric(vertical: 16),
+                        ),
+                      ),
+
+                      const SizedBox(height: 24),
+
+                      // ── Result display ──
+                      if (_message != null) _buildResultCard(),
+                    ],
+                  ),
                 ),
               ),
             ),
-            const SizedBox(height: 20),
-
-            // ── File picker button ──
-            ElevatedButton.icon(
-              onPressed: _uploading ? null : _pickFile,
-              icon: const Icon(Icons.upload_file),
-              label: const Text('Pilih File Excel'),
-              style: ElevatedButton.styleFrom(
-                backgroundColor: const Color(0xFF00C87A),
-                padding: const EdgeInsets.symmetric(vertical: 16),
-              ),
-            ),
-            const SizedBox(height: 12),
-
-            // ── Selected file display ──
-            if (_selectedFile != null)
-              Container(
-                padding: const EdgeInsets.all(12),
-                decoration: BoxDecoration(
-                  color: Theme.of(context).colorScheme.surfaceContainerHighest,
-                  borderRadius: BorderRadius.circular(8),
-                  border:
-                      Border.all(color: Theme.of(context).colorScheme.outline),
-                ),
-                child: Row(
-                  children: [
-                    Icon(Icons.insert_drive_file,
-                        color: Theme.of(context).colorScheme.primary),
-                    const SizedBox(width: 8),
-                    Expanded(
-                      child: Text(
-                        _selectedFile!.split('/').last,
-                        style: const TextStyle(fontWeight: FontWeight.w500),
-                        overflow: TextOverflow.ellipsis,
-                      ),
-                    ),
-                    IconButton(
-                      onPressed: _uploading
-                          ? null
-                          : () => setState(() => _selectedFile = null),
-                      icon: const Icon(Icons.close, size: 20),
-                    ),
-                  ],
-                ),
-              ),
-
-            const SizedBox(height: 20),
-
-            // ── Upload button ──
-            ElevatedButton.icon(
-              onPressed: _selectedFile == null || _uploading ? null : _upload,
-              icon: _uploading
-                  ? const SizedBox(
-                      width: 16,
-                      height: 16,
-                      child: CircularProgressIndicator(
-                        strokeWidth: 2,
-                        color: Colors.white,
-                      ),
-                    )
-                  : const Icon(Icons.cloud_upload),
-              label: Text(_uploading ? 'Mengunggah...' : 'Upload ke Server'),
-              style: ElevatedButton.styleFrom(
-                backgroundColor: Colors.blue,
-                padding: const EdgeInsets.symmetric(vertical: 16),
-              ),
-            ),
-
-            const SizedBox(height: 24),
-
-            // ── Result display ──
-            if (_message != null) _buildResultCard(),
           ],
         ),
       ),

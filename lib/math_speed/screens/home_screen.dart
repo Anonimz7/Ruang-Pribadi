@@ -35,9 +35,6 @@ class _HomeScreenState extends State<HomeScreen> {
     final settings = Provider.of<SettingsProvider>(context);
     final quiz = Provider.of<QuizProvider>(context, listen: false);
     return Scaffold(
-      appBar: AppBar(
-        title: const Text("Math Speed Up"),
-      ),
       body: SingleChildScrollView(
         padding: const EdgeInsets.all(16),
         child: Column(

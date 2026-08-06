@@ -2,8 +2,6 @@
 import 'package:fl_chart/fl_chart.dart';
 import 'package:intl/intl.dart';
 import '../../services/apis.dart';
-import '../../services/api_client.dart';
-import '../../services/app_registry.dart';
 import '../models/stock_models.dart';
 import '../../widgets/stock_widgets.dart';
 
@@ -260,192 +258,191 @@ class _StocksScreenState extends State<StocksScreen> {
 
   Color _colorFor(int index) => _compareColors[index % _compareColors.length];
 
-  void _navigateToUpload() {
-    final client = ApiClient();
-    if (client.tier != 'admin') {
-      ScaffoldMessenger.of(context).showSnackBar(
-        const SnackBar(content: Text('Hanya admin yang bisa upload data')),
-      );
-      return;
-    }
-    final uploadApp = appRegistry.firstWhere((a) => a.key == 'idx_upload');
-    Navigator.push(context, MaterialPageRoute(builder: uploadApp.builder));
-  }
-
   @override
   Widget build(BuildContext context) {
     return Scaffold(
-      appBar: AppBar(
-        title: const Text('Saham IDX'),
-        actions: [
-          if (_analysis != null)
-            IconButton(
-              icon: Icon(
-                _compareMode ? Icons.compare_arrows : Icons.timeline,
-                color: _compareMode ? const Color(0xFF00C87A) : null,
-              ),
-              tooltip: _compareMode ? 'Mode Normal' : 'Bandingkan Saham',
-              onPressed: () {
-                setState(() => _compareMode = !_compareMode);
-              },
-            ),
-          IconButton(
-            icon: const Icon(Icons.upload_file),
-            tooltip: 'Upload Data',
-            onPressed: _navigateToUpload,
-          ),
-        ],
-      ),
-      body: Column(
-        children: [
-          // Search
-          Padding(
-            padding: const EdgeInsets.all(12),
-            child: Column(children: [
-              TextField(
-                controller: _searchCtrl,
-                decoration: InputDecoration(
-                  hintText: 'Cari ticker (BBCA, GOTO...)',
-                  prefixIcon: const Icon(Icons.search),
-                  border: OutlineInputBorder(
-                      borderRadius: BorderRadius.circular(12)),
-                  contentPadding: const EdgeInsets.symmetric(horizontal: 16),
-                ),
-                onChanged: _search,
-                onSubmitted: (v) => _load(v.toUpperCase()),
-              ),
-              const SizedBox(height: 8),
-              // Period
-              Row(
-                mainAxisAlignment: MainAxisAlignment.center,
-                children: [30, 60, 90, 180, 365]
-                    .map((d) => Padding(
-                          padding: const EdgeInsets.symmetric(horizontal: 3),
-                          child: ChoiceChip(
-                            label: Text('${d}H',
-                                style: TextStyle(
-                                    fontSize: 11,
-                                    color: _days == d ? Colors.black : null)),
-                            selected: _days == d,
-                            selectedColor: const Color(0xFF00C87A),
-                            onSelected: (_) {
-                              setState(() => _days = d);
-                              if (_analysis != null) {
-                                _load(_analysis!.ticker);
-                                // Refresh compare data with new period
-                                for (final t in _compareTickers) {
-                                  _refreshCompare(t);
-                                }
-                              }
-                            },
-                          ),
-                        ))
-                    .toList(),
-              ),
-            ]),
-          ),
-          // Compare mode: chips row + add button
-          if (_analysis != null)
-            Padding(
-              padding: const EdgeInsets.symmetric(horizontal: 12),
-              child: Column(
-                children: [
-                  Row(
-                    children: [
-                      const Icon(Icons.compare_arrows,
-                          size: 14, color: Colors.grey),
-                      const SizedBox(width: 4),
-                      const Text('Bandingkan',
-                          style: TextStyle(
-                              fontSize: 11,
-                              fontWeight: FontWeight.w600,
-                              color: Colors.grey)),
-                      const Spacer(),
-                      ActionChip(
-                        avatar: const Icon(Icons.add, size: 14),
-                        label: const Text('Tambah',
-                            style: TextStyle(fontSize: 11)),
-                        onPressed: _showCompareSearch,
-                        visualDensity: VisualDensity.compact,
-                        materialTapTargetSize: MaterialTapTargetSize.shrinkWrap,
-                      ),
-                    ],
-                  ),
-                  if (_compareTickers.isNotEmpty) ...[
-                    const SizedBox(height: 6),
-                    SizedBox(
-                      height: 32,
-                      child: ListView.separated(
-                        scrollDirection: Axis.horizontal,
-                        itemCount: _compareTickers.length,
-                        separatorBuilder: (_, __) => const SizedBox(width: 6),
-                        itemBuilder: (_, i) {
-                          final t = _compareTickers[i];
-                          final c = _colorFor(i + 1);
-                          return InputChip(
-                            avatar: CircleAvatar(radius: 6, backgroundColor: c),
-                            label: Text(t,
-                                style: const TextStyle(
-                                    fontSize: 11, fontWeight: FontWeight.bold)),
-                            deleteIcon: const Icon(Icons.close, size: 14),
-                            onDeleted: () => _removeCompare(t),
-                            materialTapTargetSize:
-                                MaterialTapTargetSize.shrinkWrap,
-                            visualDensity: VisualDensity.compact,
-                            side: BorderSide(color: c.withValues(alpha: 0.4)),
-                          );
-                        },
+      body: SafeArea(
+        child: Column(
+          children: [
+            // Back button + title — only when opened from the stock list
+            // (initialTicker set); in the main menu it has no AppBar at all.
+            if (widget.initialTicker != null)
+              Padding(
+                padding: const EdgeInsets.fromLTRB(4, 4, 12, 0),
+                child: Row(
+                  children: [
+                    IconButton(
+                      icon: const Icon(Icons.arrow_back),
+                      tooltip: 'Kembali',
+                      onPressed: () => Navigator.of(context).maybePop(),
+                    ),
+                    const SizedBox(width: 4),
+                    Expanded(
+                      child: Text(
+                        _analysis?.ticker ?? 'Analisis Saham',
+                        maxLines: 1,
+                        overflow: TextOverflow.ellipsis,
+                        style: const TextStyle(
+                          fontSize: 18,
+                          fontWeight: FontWeight.w600,
+                        ),
                       ),
                     ),
                   ],
-                  const SizedBox(height: 6),
-                ],
+                ),
               ),
+            // Search
+            Padding(
+              padding: const EdgeInsets.all(12),
+              child: Column(children: [
+                TextField(
+                  controller: _searchCtrl,
+                  decoration: InputDecoration(
+                    hintText: 'Cari ticker (BBCA, GOTO...)',
+                    prefixIcon: const Icon(Icons.search),
+                    border: OutlineInputBorder(
+                        borderRadius: BorderRadius.circular(12)),
+                    contentPadding: const EdgeInsets.symmetric(horizontal: 16),
+                  ),
+                  onChanged: _search,
+                  onSubmitted: (v) => _load(v.toUpperCase()),
+                ),
+                const SizedBox(height: 8),
+                // Period
+                Row(
+                  mainAxisAlignment: MainAxisAlignment.center,
+                  children: [30, 60, 90, 180, 365]
+                      .map((d) => Padding(
+                            padding: const EdgeInsets.symmetric(horizontal: 3),
+                            child: ChoiceChip(
+                              label: Text('${d}H',
+                                  style: TextStyle(
+                                      fontSize: 11,
+                                      color: _days == d ? Colors.black : null)),
+                              selected: _days == d,
+                              selectedColor: const Color(0xFF00C87A),
+                              onSelected: (_) {
+                                setState(() => _days = d);
+                                if (_analysis != null) {
+                                  _load(_analysis!.ticker);
+                                  // Refresh compare data with new period
+                                  for (final t in _compareTickers) {
+                                    _refreshCompare(t);
+                                  }
+                                }
+                              },
+                            ),
+                          ))
+                      .toList(),
+                ),
+              ]),
             ),
-          // Search results
-          if (_results.isNotEmpty)
-            Container(
-              constraints: const BoxConstraints(maxHeight: 150),
-              child: ListView.builder(
-                shrinkWrap: true,
-                itemCount: _results.length,
-                itemBuilder: (_, i) {
-                  final s = _results[i];
-                  return ListTile(
-                    dense: true,
-                    leading:
-                        const Icon(Icons.show_chart, color: Color(0xFF00C87A)),
-                    title: Row(
+            // Compare mode: chips row + add button
+            if (_analysis != null)
+              Padding(
+                padding: const EdgeInsets.symmetric(horizontal: 12),
+                child: Column(
+                  children: [
+                    Row(
                       children: [
-                        Text(s.ticker,
-                            style:
-                                const TextStyle(fontWeight: FontWeight.bold)),
-                        const SizedBox(width: 6),
-                        StockSectorBadge(label: s.sector, small: true),
-                        if (s.isDelisted) ...[
-                          const SizedBox(width: 4),
-                          DelistedBadge(
-                              labelDelisted: s.labelDelisted, small: true),
-                        ],
+                        const Icon(Icons.compare_arrows,
+                            size: 14, color: Colors.grey),
+                        const SizedBox(width: 4),
+                        const Text('Bandingkan',
+                            style: TextStyle(
+                                fontSize: 11,
+                                fontWeight: FontWeight.w600,
+                                color: Colors.grey)),
+                        const Spacer(),
+                        ActionChip(
+                          avatar: const Icon(Icons.add, size: 14),
+                          label: const Text('Tambah',
+                              style: TextStyle(fontSize: 11)),
+                          onPressed: _showCompareSearch,
+                          visualDensity: VisualDensity.compact,
+                          materialTapTargetSize:
+                              MaterialTapTargetSize.shrinkWrap,
+                        ),
                       ],
                     ),
-                    subtitle: Text(s.companyName,
-                        style: const TextStyle(fontSize: 12)),
-                    onTap: () => _load(s.ticker),
-                  );
-                },
+                    if (_compareTickers.isNotEmpty) ...[
+                      const SizedBox(height: 6),
+                      SizedBox(
+                        height: 32,
+                        child: ListView.separated(
+                          scrollDirection: Axis.horizontal,
+                          itemCount: _compareTickers.length,
+                          separatorBuilder: (_, __) => const SizedBox(width: 6),
+                          itemBuilder: (_, i) {
+                            final t = _compareTickers[i];
+                            final c = _colorFor(i + 1);
+                            return InputChip(
+                              avatar:
+                                  CircleAvatar(radius: 6, backgroundColor: c),
+                              label: Text(t,
+                                  style: const TextStyle(
+                                      fontSize: 11,
+                                      fontWeight: FontWeight.bold)),
+                              deleteIcon: const Icon(Icons.close, size: 14),
+                              onDeleted: () => _removeCompare(t),
+                              materialTapTargetSize:
+                                  MaterialTapTargetSize.shrinkWrap,
+                              visualDensity: VisualDensity.compact,
+                              side: BorderSide(color: c.withValues(alpha: 0.4)),
+                            );
+                          },
+                        ),
+                      ),
+                    ],
+                    const SizedBox(height: 6),
+                  ],
+                ),
               ),
+            // Search results
+            if (_results.isNotEmpty)
+              Container(
+                constraints: const BoxConstraints(maxHeight: 150),
+                child: ListView.builder(
+                  shrinkWrap: true,
+                  itemCount: _results.length,
+                  itemBuilder: (_, i) {
+                    final s = _results[i];
+                    return ListTile(
+                      dense: true,
+                      leading: const Icon(Icons.show_chart,
+                          color: Color(0xFF00C87A)),
+                      title: Row(
+                        children: [
+                          Text(s.ticker,
+                              style:
+                                  const TextStyle(fontWeight: FontWeight.bold)),
+                          const SizedBox(width: 6),
+                          StockSectorBadge(label: s.sector, small: true),
+                          if (s.isDelisted) ...[
+                            const SizedBox(width: 4),
+                            DelistedBadge(
+                                labelDelisted: s.labelDelisted, small: true),
+                          ],
+                        ],
+                      ),
+                      subtitle: Text(s.companyName,
+                          style: const TextStyle(fontSize: 12)),
+                      onTap: () => _load(s.ticker),
+                    );
+                  },
+                ),
+              ),
+            // Analysis
+            Expanded(
+              child: _loading
+                  ? const Center(child: CircularProgressIndicator())
+                  : _analysis == null
+                      ? const Center(
+                          child: Text('Cari saham untuk melihat analisis'))
+                      : _buildAnalysis(),
             ),
-          // Analysis
-          Expanded(
-            child: _loading
-                ? const Center(child: CircularProgressIndicator())
-                : _analysis == null
-                    ? const Center(
-                        child: Text('Cari saham untuk melihat analisis'))
-                    : _buildAnalysis(),
-          ),
-        ],
+          ],
+        ),
       ),
     );
   }

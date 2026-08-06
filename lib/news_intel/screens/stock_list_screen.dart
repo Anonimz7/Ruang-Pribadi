@@ -252,212 +252,231 @@ class _StockListScreenState extends State<StockListScreen> {
     final colors = Theme.of(context).colorScheme;
 
     return Scaffold(
-      appBar: AppBar(
-        title: const Text('Semua Saham IDX'),
-        actions: [
-          IconButton(
-            icon: const Icon(Icons.refresh),
-            tooltip: 'Muat Ulang',
-            onPressed: _loadFirstPage,
-          ),
-        ],
-      ),
-      body: Column(
-        children: [
-          // ── Filter bar ──
-          Container(
-            padding: const EdgeInsets.fromLTRB(12, 10, 12, 8),
-            decoration: BoxDecoration(
-              color: colors.surfaceContainerHighest.withValues(alpha: 0.3),
-              border: Border(
-                bottom: BorderSide(
-                  color: colors.outlineVariant.withValues(alpha: 0.4),
+      body: SafeArea(
+        child: Column(
+          children: [
+            // ── Filter bar ──
+            Container(
+              padding: const EdgeInsets.fromLTRB(12, 10, 12, 8),
+              decoration: BoxDecoration(
+                color: colors.surfaceContainerHighest.withValues(alpha: 0.3),
+                border: Border(
+                  bottom: BorderSide(
+                    color: colors.outlineVariant.withValues(alpha: 0.4),
+                  ),
                 ),
               ),
-            ),
-            child: Column(
-              children: [
-                // Search field
-                TextField(
-                  controller: _searchCtrl,
-                  decoration: InputDecoration(
-                    hintText: 'Cari ticker atau nama...',
-                    prefixIcon: const Icon(Icons.search, size: 20),
-                    suffixIcon: _searchCtrl.text.isNotEmpty
-                        ? IconButton(
-                            icon: const Icon(Icons.clear, size: 18),
-                            onPressed: () {
-                              _searchCtrl.clear();
-                              _query = '';
-                              _loadFirstPage();
-                            },
-                          )
-                        : null,
-                    isDense: true,
-                    border: OutlineInputBorder(
-                      borderRadius: BorderRadius.circular(10),
+              child: Column(
+                children: [
+                  // Search field
+                  TextField(
+                    controller: _searchCtrl,
+                    decoration: InputDecoration(
+                      hintText: 'Cari ticker atau nama...',
+                      prefixIcon: const Icon(Icons.search, size: 20),
+                      suffixIcon: _searchCtrl.text.isNotEmpty
+                          ? IconButton(
+                              icon: const Icon(Icons.clear, size: 18),
+                              onPressed: () {
+                                _searchCtrl.clear();
+                                _query = '';
+                                _loadFirstPage();
+                              },
+                            )
+                          : null,
+                      isDense: true,
+                      border: OutlineInputBorder(
+                        borderRadius: BorderRadius.circular(10),
+                      ),
+                      contentPadding: const EdgeInsets.symmetric(
+                          horizontal: 12, vertical: 10),
                     ),
-                    contentPadding: const EdgeInsets.symmetric(
-                        horizontal: 12, vertical: 10),
+                    onChanged: _onSearchChanged,
                   ),
-                  onChanged: _onSearchChanged,
-                ),
-                const SizedBox(height: 8),
-                // Sector filters — cascading: Sektor → Sub Sektor Primer →
-                // Sub Sektor. Lower levels are disabled until their parent
-                // is chosen, and reset when the parent changes.
-                Row(
-                  children: [
-                    Icon(Icons.filter_list,
-                        size: 16, color: colors.onSurfaceVariant),
-                    const SizedBox(width: 4),
-                    Text('Sektor:',
-                        style: TextStyle(
-                            fontSize: 12, color: colors.onSurfaceVariant)),
-                    const SizedBox(width: 8),
-                    Expanded(
-                      child: _sectorDropdown(
-                        value: _selectedSector,
-                        hint: 'Semua',
-                        items: _sectors,
-                        onChanged: _onSectorChanged,
+                  const SizedBox(height: 8),
+                  // Sector filters — cascading: Sektor → Sub Sektor Primer →
+                  // Sub Sektor. Lower levels are disabled until their parent
+                  // is chosen, and reset when the parent changes.
+                  Row(
+                    children: [
+                      Icon(Icons.filter_list,
+                          size: 16, color: colors.onSurfaceVariant),
+                      const SizedBox(width: 4),
+                      Text('Sektor:',
+                          style: TextStyle(
+                              fontSize: 12, color: colors.onSurfaceVariant)),
+                      const SizedBox(width: 8),
+                      Expanded(
+                        child: _sectorDropdown(
+                          value: _selectedSector,
+                          hint: 'Semua',
+                          items: _sectors,
+                          onChanged: _onSectorChanged,
+                        ),
                       ),
-                    ),
-                  ],
-                ),
-                const SizedBox(height: 8),
-                Row(
-                  children: [
-                    const SizedBox(width: 20),
-                    Expanded(
-                      child: _sectorDropdown(
-                        value: _selectedPrimary,
-                        hint: 'Sub Sektor Primer',
-                        items: _primarySectors,
-                        enabled: _selectedSector.isNotEmpty,
-                        onChanged: _onPrimaryChanged,
+                    ],
+                  ),
+                  const SizedBox(height: 8),
+                  Row(
+                    children: [
+                      const SizedBox(width: 20),
+                      Expanded(
+                        child: _sectorDropdown(
+                          value: _selectedPrimary,
+                          hint: 'Sub Sektor Primer',
+                          items: _primarySectors,
+                          enabled: _selectedSector.isNotEmpty,
+                          onChanged: _onPrimaryChanged,
+                        ),
                       ),
-                    ),
-                    const SizedBox(width: 8),
-                    Expanded(
-                      child: _sectorDropdown(
-                        value: _selectedSub,
-                        hint: 'Sub Sektor',
-                        items: _subSectors,
-                        enabled: _selectedPrimary.isNotEmpty,
-                        onChanged: _onSubChanged,
+                      const SizedBox(width: 8),
+                      Expanded(
+                        child: _sectorDropdown(
+                          value: _selectedSub,
+                          hint: 'Sub Sektor',
+                          items: _subSectors,
+                          enabled: _selectedPrimary.isNotEmpty,
+                          onChanged: _onSubChanged,
+                        ),
                       ),
-                    ),
-                  ],
-                ),
-                if (_selectedSector.isNotEmpty)
-                  Padding(
-                    padding: const EdgeInsets.only(top: 6),
-                    child: Align(
-                      alignment: Alignment.centerRight,
-                      child: TextButton.icon(
-                        onPressed: _resetSectorFilters,
-                        icon: const Icon(Icons.close, size: 14),
-                        label: const Text('Reset Filter',
-                            style: TextStyle(fontSize: 11)),
-                        style: TextButton.styleFrom(
-                          padding: const EdgeInsets.symmetric(
-                              horizontal: 8, vertical: 0),
-                          minimumSize: Size.zero,
-                          tapTargetSize: MaterialTapTargetSize.shrinkWrap,
+                    ],
+                  ),
+                  if (_selectedSector.isNotEmpty)
+                    Padding(
+                      padding: const EdgeInsets.only(top: 6),
+                      child: Align(
+                        alignment: Alignment.centerRight,
+                        child: TextButton.icon(
+                          onPressed: _resetSectorFilters,
+                          icon: const Icon(Icons.close, size: 14),
+                          label: const Text('Reset Filter',
+                              style: TextStyle(fontSize: 11)),
+                          style: TextButton.styleFrom(
+                            padding: const EdgeInsets.symmetric(
+                                horizontal: 8, vertical: 0),
+                            minimumSize: Size.zero,
+                            tapTargetSize: MaterialTapTargetSize.shrinkWrap,
+                          ),
                         ),
                       ),
                     ),
-                  ),
-              ],
-            ),
-          ),
-
-          // ── Status bar ──
-          if (!_loadingFirst)
-            Padding(
-              padding: const EdgeInsets.symmetric(horizontal: 14, vertical: 6),
-              child: Row(
-                children: [
-                  Text(
-                    _filterActive
-                        ? 'Menampilkan $_total saham (filter aktif)'
-                        : '$_total saham total — halaman ${(_offset / _pageSize).ceil()}',
-                    style:
-                        TextStyle(fontSize: 11, color: colors.onSurfaceVariant),
-                  ),
-                  if (_selectedSector.isNotEmpty) ...[
-                    const SizedBox(width: 8),
-                    StockSectorBadge(label: _selectedSector, small: true),
-                  ],
-                  if (_selectedPrimary.isNotEmpty) ...[
-                    const SizedBox(width: 4),
-                    StockSectorBadge(label: _selectedPrimary, small: true),
-                  ],
-                  if (_selectedSub.isNotEmpty) ...[
-                    const SizedBox(width: 4),
-                    StockSectorBadge(label: _selectedSub, small: true),
-                  ],
-                  if (_selectedSector.isNotEmpty) ...[
-                    const SizedBox(width: 4),
-                    GestureDetector(
-                      onTap: _resetSectorFilters,
-                      child: Icon(Icons.close,
-                          size: 14, color: colors.onSurfaceVariant),
-                    ),
-                  ],
                 ],
               ),
             ),
 
-          // ── Stock list ──
-          Expanded(
-            child: _loadingFirst
-                ? const Center(child: CircularProgressIndicator())
-                : _error != null
-                    ? Center(
-                        child: Column(
-                          mainAxisSize: MainAxisSize.min,
-                          children: [
-                            const Icon(Icons.error_outline,
-                                size: 48, color: Colors.red),
-                            const SizedBox(height: 8),
-                            Text(_error!,
-                                style: const TextStyle(color: Colors.red)),
-                            const SizedBox(height: 12),
-                            ElevatedButton.icon(
-                              onPressed: _loadFirstPage,
-                              icon: const Icon(Icons.refresh),
-                              label: const Text('Coba Lagi'),
-                            ),
-                          ],
-                        ),
-                      )
-                    : _stocks.isEmpty
-                        ? const Center(
-                            child: Text('Tidak ada saham ditemukan',
-                                style: TextStyle(color: Colors.grey)))
-                        : ListView.builder(
-                            controller: _scrollCtrl,
-                            itemCount: _stocks.length + (_hasMore ? 1 : 0),
-                            itemBuilder: (_, i) {
-                              if (i == _stocks.length) {
-                                return const Padding(
-                                  padding: EdgeInsets.all(16),
-                                  child: Center(
-                                      child: CircularProgressIndicator(
-                                          strokeWidth: 2)),
-                                );
-                              }
-                              final stock = _stocks[i];
-                              return _StockListTile(
-                                stock: stock,
-                                onTap: () => _openAnalysis(stock.ticker),
-                              );
-                            },
-                          ),
-          ),
-        ],
+            // ── Status bar ──
+            if (!_loadingFirst)
+              Padding(
+                padding:
+                    const EdgeInsets.symmetric(horizontal: 14, vertical: 6),
+                child: Row(
+                  children: [
+                    Text(
+                      _filterActive
+                          ? 'Menampilkan $_total saham (filter aktif)'
+                          : '$_total saham total — halaman ${(_offset / _pageSize).ceil()}',
+                      style: TextStyle(
+                          fontSize: 11, color: colors.onSurfaceVariant),
+                    ),
+                    if (_selectedSector.isNotEmpty) ...[
+                      const SizedBox(width: 8),
+                      StockSectorBadge(label: _selectedSector, small: true),
+                    ],
+                    if (_selectedPrimary.isNotEmpty) ...[
+                      const SizedBox(width: 4),
+                      StockSectorBadge(label: _selectedPrimary, small: true),
+                    ],
+                    if (_selectedSub.isNotEmpty) ...[
+                      const SizedBox(width: 4),
+                      StockSectorBadge(label: _selectedSub, small: true),
+                    ],
+                    if (_selectedSector.isNotEmpty) ...[
+                      const SizedBox(width: 4),
+                      GestureDetector(
+                        onTap: _resetSectorFilters,
+                        child: Icon(Icons.close,
+                            size: 14, color: colors.onSurfaceVariant),
+                      ),
+                    ],
+                  ],
+                ),
+              ),
+
+            // ── Stock list ──
+            Expanded(
+              child: _loadingFirst
+                  ? const Center(child: CircularProgressIndicator())
+                  : RefreshIndicator(
+                      onRefresh: _loadFirstPage,
+                      child: _error != null
+                          ? ListView(
+                              physics: const AlwaysScrollableScrollPhysics(),
+                              children: [
+                                SizedBox(
+                                  height:
+                                      MediaQuery.sizeOf(context).height * 0.3,
+                                ),
+                                Icon(Icons.error_outline,
+                                    size: 48,
+                                    color: Theme.of(context).colorScheme.error),
+                                const SizedBox(height: 8),
+                                Center(
+                                  child: Text(_error!,
+                                      style: TextStyle(
+                                          color: Theme.of(context)
+                                              .colorScheme
+                                              .error)),
+                                ),
+                                const SizedBox(height: 12),
+                                Center(
+                                  child: ElevatedButton.icon(
+                                    onPressed: _loadFirstPage,
+                                    icon: const Icon(Icons.refresh),
+                                    label: const Text('Coba Lagi'),
+                                  ),
+                                ),
+                              ],
+                            )
+                          : _stocks.isEmpty
+                              ? ListView(
+                                  physics:
+                                      const AlwaysScrollableScrollPhysics(),
+                                  children: const [
+                                    SizedBox(height: 200),
+                                    Center(
+                                      child: Text(
+                                        'Tidak ada saham ditemukan',
+                                        style: TextStyle(color: Colors.grey),
+                                      ),
+                                    ),
+                                  ],
+                                )
+                              : ListView.builder(
+                                  controller: _scrollCtrl,
+                                  physics:
+                                      const AlwaysScrollableScrollPhysics(),
+                                  itemCount:
+                                      _stocks.length + (_hasMore ? 1 : 0),
+                                  itemBuilder: (_, i) {
+                                    if (i == _stocks.length) {
+                                      return const Padding(
+                                        padding: EdgeInsets.all(16),
+                                        child: Center(
+                                            child: CircularProgressIndicator(
+                                                strokeWidth: 2)),
+                                      );
+                                    }
+                                    final stock = _stocks[i];
+                                    return _StockListTile(
+                                      stock: stock,
+                                      onTap: () => _openAnalysis(stock.ticker),
+                                    );
+                                  },
+                                ),
+                    ),
+            ),
+          ],
+        ),
       ),
     );
   }

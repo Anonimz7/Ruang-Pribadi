@@ -471,7 +471,9 @@ class _AdminPermScreenState extends State<AdminPermScreen> {
                         .where((a) => [
                               'bahasa_jepang',
                               'math_speed',
-                              'password_generator'
+                              'password_generator',
+                              'gacha_luck',
+                              'rolling'
                             ].contains(a))
                         .map((app) => _defaultChip(app))
                         .toList(),
@@ -594,6 +596,8 @@ class _AdminPermScreenState extends State<AdminPermScreen> {
       'bahasa_jepang': '🇯🇵 Bahasa Jepang',
       'math_speed': '🧮 Math Speed',
       'password_generator': '🔑 Password Gen',
+      'gacha_luck': '🎰 Gacha Keberuntungan',
+      'rolling': '🎲 Rolling Yes/No',
       'video_downloader': '🎬 Video Downloader',
       'news': '📰 Berita',
       'stocks': '📈 Saham IDX',
@@ -614,6 +618,8 @@ class _AdminPermScreenState extends State<AdminPermScreen> {
       'bahasa_jepang': Colors.red,
       'math_speed': Colors.orange,
       'password_generator': Colors.teal,
+      'gacha_luck': Colors.amber,
+      'rolling': Colors.lightGreen,
       'video_downloader': Colors.pink,
       'news': Colors.blue,
       'stocks': Colors.green,
