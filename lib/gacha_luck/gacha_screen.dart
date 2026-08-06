@@ -80,7 +80,6 @@ class _GachaLuckScreenState extends State<GachaLuckScreen>
   /// Posisi roda sebelum putaran ini + sudut putaran berjalan
   double _baseRotation = 0;
   double _spinAngle = 0;
-  LuckTier _targetTier = LuckTier.normal;
 
   @override
   void initState() {
@@ -88,10 +87,12 @@ class _GachaLuckScreenState extends State<GachaLuckScreen>
     _controller = AnimationController(vsync: this)
       ..addStatusListener((status) {
         if (status == AnimationStatus.completed) {
+          // Baca hasil dari posisi akhir roda (di mana pun ia berhenti)
+          final finalAngle = _baseRotation + _spinAngle;
           setState(() {
             _spinning = false;
-            _result = _targetTier;
-            _message = _randomMessage(_targetTier);
+            _result = _resultFromAngle(finalAngle);
+            _message = _randomMessage(_result!);
           });
         }
       });
@@ -101,6 +102,17 @@ class _GachaLuckScreenState extends State<GachaLuckScreen>
   void dispose() {
     _controller.dispose();
     super.dispose();
+  }
+
+  /// Baca hasil dari posisi akhir roda (di mana pun ia berhenti)
+  LuckTier _resultFromAngle(double angleDeg) {
+    final n = LuckTier.values.length;
+    final sectorAngle = 360 / n;
+    final normalized = ((angleDeg % 360) + 360) % 360;
+    final sectorIndex = ((normalized - 270 + sectorAngle / 2) / sectorAngle)
+            .floor() %
+        n;
+    return LuckTier.values[sectorIndex];
   }
 
   /// Pilih tingkat — random murni berbasis timestamp
@@ -154,7 +166,6 @@ class _GachaLuckScreenState extends State<GachaLuckScreen>
       _message = null;
       _baseRotation = _baseRotation + _spinAngle;
       _spinAngle = totalAngle;
-      _targetTier = tier;
     });
 
     _controller.value = 0;

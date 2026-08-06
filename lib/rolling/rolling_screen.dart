@@ -35,7 +35,6 @@ class _RollingScreenState extends State<RollingScreen>
 
   double _baseRotation = 0;
   double _spinAngle = 0;
-  YesNo _target = YesNo.yes;
 
   @override
   void initState() {
@@ -43,9 +42,11 @@ class _RollingScreenState extends State<RollingScreen>
     _controller = AnimationController(vsync: this)
       ..addStatusListener((status) {
         if (status == AnimationStatus.completed) {
+          // Baca hasil dari posisi akhir roda (di mana pun ia berhenti)
+          final finalAngle = _baseRotation + _spinAngle;
           setState(() {
             _spinning = false;
-            _result = _target;
+            _result = _resultFromAngle(finalAngle);
           });
         }
       });
@@ -61,6 +62,18 @@ class _RollingScreenState extends State<RollingScreen>
   YesNo _roll() {
     final rng = Random(DateTime.now().microsecondsSinceEpoch);
     return rng.nextBool() ? YesNo.yes : YesNo.no;
+  }
+
+  /// Baca hasil dari posisi akhir roda (di mana pun ia berhenti)
+  YesNo _resultFromAngle(double angleDeg) {
+    const n = 10;
+    final sectorAngle = 360 / n;
+    // Jarum statis di atas (270°). Sektor di bawah jarum:
+    final normalized = ((angleDeg % 360) + 360) % 360;
+    final sectorIndex = ((normalized - 270 + sectorAngle / 2) / sectorAngle)
+            .floor() %
+        n;
+    return sectorIndex.isEven ? YesNo.yes : YesNo.no;
   }
 
   void _spin() {
@@ -97,7 +110,6 @@ class _RollingScreenState extends State<RollingScreen>
       _result = null;
       _baseRotation = _baseRotation + _spinAngle;
       _spinAngle = totalAngle;
-      _target = target;
     });
 
     _controller.value = 0;
