@@ -17,6 +17,7 @@ import '../settings/backup_screen.dart';
 import '../video_downloader/screens/video_downloader_screen.dart';
 import '../gacha_luck/gacha_screen.dart';
 import '../rolling/rolling_screen.dart';
+import '../code_diagram/screens/code_diagram_screen.dart';
 import 'dark_mode_service.dart';
 
 /// App definition
@@ -104,6 +105,13 @@ final List<AppDef> appRegistry = [
     icon: Icons.change_circle,
     label: 'Rolling Yes / No',
     builder: (_) => const RollingScreen(),
+    section: 'menu',
+  ),
+  AppDef(
+    key: 'code_diagram',
+    icon: Icons.account_tree,
+    label: 'Render Diagram',
+    builder: (_) => const CodeDiagramScreen(),
     section: 'menu',
   ),
 

@@ -27,6 +27,7 @@ dependencies:
   webview_flutter: ^4.14.1
   url_launcher: ^6.2.0
   audioplayers: ^6.8.1
+  puml_canvas: ^0.13.0
 
 dev_dependencies:
   flutter_test:

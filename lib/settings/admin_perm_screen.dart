@@ -473,7 +473,8 @@ class _AdminPermScreenState extends State<AdminPermScreen> {
                               'math_speed',
                               'password_generator',
                               'gacha_luck',
-                              'rolling'
+                              'rolling',
+                              'code_diagram'
                             ].contains(a))
                         .map((app) => _defaultChip(app))
                         .toList(),
@@ -598,6 +599,7 @@ class _AdminPermScreenState extends State<AdminPermScreen> {
       'password_generator': '🔑 Password Gen',
       'gacha_luck': '🎰 Gacha Keberuntungan',
       'rolling': '🎲 Rolling Yes/No',
+      'code_diagram': '📐 Render Diagram',
       'video_downloader': '🎬 Video Downloader',
       'news': '📰 Berita',
       'stocks': '📈 Saham IDX',
@@ -620,6 +622,7 @@ class _AdminPermScreenState extends State<AdminPermScreen> {
       'password_generator': Colors.teal,
       'gacha_luck': Colors.amber,
       'rolling': Colors.lightGreen,
+      'code_diagram': Colors.indigo,
       'video_downloader': Colors.pink,
       'news': Colors.blue,
       'stocks': Colors.green,
