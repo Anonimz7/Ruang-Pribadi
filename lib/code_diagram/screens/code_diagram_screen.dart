@@ -1,17 +1,17 @@
-import 'dart:io';
-import 'dart:ui' as ui;
+import 'dart:typed_data';
 
 import 'package:file_picker/file_picker.dart';
 import 'package:flutter/material.dart';
-import 'package:flutter/rendering.dart';
-import 'package:puml_canvas/puml_canvas.dart';
+
+import '../services/plantuml_client.dart';
 
 /// ═══════════════════════════════════════════════════════
-/// CODE DIAGRAM — Tulis kode PlantUML → render → simpan PNG
+/// CODE DIAGRAM — Tulis kode PlantUML → render (server) → simpan PNG
 /// ═══════════════════════════════════════════════════════
-/// Editor monospace multi-line di atas, tombol Render di tengah,
-/// preview diagram via `PumlView` (puml_canvas, render native canvas).
-/// Simpan PNG lewat `saveFile` dialog (FilePicker).
+/// Editor monospace multi-line di atas, tombol Render di tengah.
+/// Render via PlantUML server asli (graphviz) → hasil rapi,
+/// warna per-stereotype & note didukung penuh.
+/// Simpan PNG: byte dari server langsung ditulis lewat save dialog.
 /// ═══════════════════════════════════════════════════════
 class CodeDiagramScreen extends StatefulWidget {
   const CodeDiagramScreen({super.key});
@@ -23,22 +23,19 @@ class CodeDiagramScreen extends StatefulWidget {
 class _CodeDiagramScreenState extends State<CodeDiagramScreen> {
   static const _initialSource = '''
 @startuml
-class Product {
-  +name: string
-  +price: int
-}
-class Order {
-  -items: List<Product>
-}
-Order "1" --> "*" Product
+Alice -> Bob: Hello
+Bob --> Alice: Hi!
 @enduml
 ''';
 
   late final TextEditingController _controller =
       TextEditingController(text: _initialSource);
-  final _boundaryKey = GlobalKey();
-  String _source = _initialSource;
+  final _client = PlantumlClient();
+
+  Uint8List? _png;
+  bool _loading = false;
   bool _saving = false;
+  String? _error;
 
   @override
   void dispose() {
@@ -46,34 +43,42 @@ Order "1" --> "*" Product
     super.dispose();
   }
 
-  /// Simpan preview (RepaintBoundary) sebagai file PNG via save dialog.
+  Future<void> _render() async {
+    if (_loading) return;
+    setState(() {
+      _loading = true;
+      _error = null;
+      _png = null;
+    });
+    try {
+      final png = await _client.fetchPng(_controller.text);
+      if (!mounted) return;
+      setState(() => _png = png);
+    } catch (e) {
+      if (!mounted) return;
+      setState(() => _error = '$e');
+    } finally {
+      if (mounted) setState(() => _loading = false);
+    }
+  }
+
+  /// Simpan byte PNG (hasil server) via save dialog.
   Future<void> _savePng() async {
+    final png = _png;
+    if (png == null) {
+      _showSnack('Belum ada hasil render.');
+      return;
+    }
     setState(() => _saving = true);
     try {
-      final boundary = _boundaryKey.currentContext?.findRenderObject()
-          as RenderRepaintBoundary?;
-      if (boundary == null) {
-        _showSnack('Belum ada render yang bisa disimpan.');
-        return;
-      }
-      final image = await boundary.toImage(pixelRatio: 2.0);
-      final byteData = await image.toByteData(format: ui.ImageByteFormat.png);
-      image.dispose();
-      if (byteData == null) {
-        _showSnack('Gagal mengenkode gambar.');
-        return;
-      }
-
       final path = await FilePicker.saveFile(
         dialogTitle: 'Simpan Diagram PNG',
         fileName: 'diagram.png',
         type: FileType.image,
         allowedExtensions: ['png'],
+        bytes: png,
       );
       if (path == null) return; // dibatalkan user
-
-      final file = File(path);
-      await file.writeAsBytes(byteData.buffer.asUint8List());
       _showSnack('Tersimpan: $path');
     } catch (e) {
       _showSnack('Gagal menyimpan: $e');
@@ -84,83 +89,122 @@ Order "1" --> "*" Product
 
   void _showSnack(String msg) {
     if (!mounted) return;
-    ScaffoldMessenger.of(context)
-        .showSnackBar(SnackBar(content: Text(msg), duration: const Duration(seconds: 3)));
+    ScaffoldMessenger.of(context).showSnackBar(
+        SnackBar(content: Text(msg), duration: const Duration(seconds: 3)));
+  }
+
+  Widget _buildPreview() {
+    if (_loading) {
+      return const CircularProgressIndicator();
+    }
+    if (_error != null) {
+      return Padding(
+        padding: const EdgeInsets.all(16),
+        child: Column(
+          mainAxisAlignment: MainAxisAlignment.center,
+          children: [
+            const Icon(Icons.error_outline, color: Colors.redAccent, size: 40),
+            const SizedBox(height: 8),
+            Text(
+              _error!,
+              textAlign: TextAlign.center,
+              style: const TextStyle(color: Colors.redAccent),
+            ),
+          ],
+        ),
+      );
+    }
+    if (_png != null) {
+      return InteractiveViewer(
+        minScale: 0.2,
+        maxScale: 4,
+        child: Center(
+          child: Image.memory(
+            _png!,
+            fit: BoxFit.contain,
+            gaplessPlayback: true,
+          ),
+        ),
+      );
+    }
+    return const Text(
+      'Tekan Render untuk melihat hasil',
+      style: TextStyle(color: Colors.grey),
+    );
   }
 
   @override
   Widget build(BuildContext context) {
-    final boardColor =
-        Theme.of(context).brightness == Brightness.dark ? Colors.white : const Color(0xFFFFFFFF);
     return Scaffold(
-      body: ListView(
-        padding: const EdgeInsets.all(12),
+      appBar: AppBar(
+        title: const Text('Render Diagram'),
+      ),
+      body: Column(
         children: [
-          // ─── Editor kode ─────────────────────
-          TextField(
-            controller: _controller,
-            minLines: 8,
-            maxLines: 14,
-            autocorrect: false,
-            enableSuggestions: false,
-            style: const TextStyle(fontFamily: 'monospace', fontSize: 13),
-            decoration: const InputDecoration(
-              alignLabelWithHint: true,
-              labelText: 'Kode PlantUML',
-              hintText: '@startuml\n...\n@enduml',
-              border: OutlineInputBorder(),
+          // ─── Editor + tombol aksi (scroll sendiri) ──
+          Flexible(
+            child: ListView(
+              shrinkWrap: true,
+              padding: const EdgeInsets.all(12),
+              children: [
+                TextField(
+                  controller: _controller,
+                  minLines: 8,
+                  maxLines: 14,
+                  autocorrect: false,
+                  enableSuggestions: false,
+                  style: const TextStyle(fontFamily: 'monospace', fontSize: 13),
+                  decoration: const InputDecoration(
+                    alignLabelWithHint: true,
+                    labelText: 'Kode PlantUML',
+                    hintText: '@startuml\n...\n@enduml',
+                    border: OutlineInputBorder(),
+                  ),
+                ),
+                const SizedBox(height: 10),
+
+                // ─── Tombol aksi ─────────────────────
+                Row(
+                  children: [
+                    Expanded(
+                      child: FilledButton.icon(
+                        onPressed: _render,
+                        icon: const Icon(Icons.play_arrow),
+                        label: const Text('Render'),
+                      ),
+                    ),
+                    const SizedBox(width: 8),
+                    Expanded(
+                      child: OutlinedButton.icon(
+                        onPressed: _saving ? null : _savePng,
+                        icon: _saving
+                            ? const SizedBox(
+                                width: 16,
+                                height: 16,
+                                child: CircularProgressIndicator(strokeWidth: 2),
+                              )
+                            : const Icon(Icons.save_alt),
+                        label: const Text('Simpan PNG'),
+                      ),
+                    ),
+                  ],
+                ),
+                const SizedBox(height: 4),
+                const Text(
+                  'Render via PlantUML server (butuh internet).',
+                  style: TextStyle(fontSize: 11, color: Colors.grey),
+                ),
+              ],
             ),
           ),
-          const SizedBox(height: 10),
 
-          // ─── Tombol aksi ─────────────────────
-          Row(
-            children: [
-              Expanded(
-                child: FilledButton.icon(
-                  onPressed: () =>
-                      setState(() => _source = _controller.text),
-                  icon: const Icon(Icons.play_arrow),
-                  label: const Text('Render'),
-                ),
-              ),
-              const SizedBox(width: 8),
-              Expanded(
-                child: OutlinedButton.icon(
-                  onPressed: _saving ? null : _savePng,
-                  icon: _saving
-                      ? const SizedBox(
-                          width: 16,
-                          height: 16,
-                          child: CircularProgressIndicator(strokeWidth: 2),
-                        )
-                      : const Icon(Icons.save_alt),
-                  label: const Text('Simpan PNG'),
-                ),
-              ),
-            ],
-          ),
-          const SizedBox(height: 4),
-          const Text(
-            'Preview di-render native (puml_canvas) — latar putih agar PNG rapi.',
-            style: TextStyle(fontSize: 11, color: Colors.grey),
-          ),
-          const SizedBox(height: 8),
-
-          // ─── Preview (zoom/geser, binder putih agar PNG rapi) ──
-          // RepaintBoundary di DALAM InteractiveViewer: PNG selalu skala dasar,
-          // tidak ikut transform zoom/geser.
-          InteractiveViewer(
-            minScale: 0.2,
-            maxScale: 4,
-            child: RepaintBoundary(
-              key: _boundaryKey,
-              child: Container(
-                color: boardColor,
-                padding: const EdgeInsets.all(12),
-                alignment: Alignment.topLeft,
-                child: PumlView(source: _source),
-              ),
+          // ─── Preview: Expanded → sisa tinggi layar ──
+          Expanded(
+            child: Container(
+              width: double.infinity,
+              color: Colors.white,
+              alignment: Alignment.center,
+              child: _buildPreview(),
             ),
           ),
         ],

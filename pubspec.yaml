@@ -2,7 +2,7 @@ name: ruang_pribadi
 description: "Aplikasi ALL Role Buat Hepi Hepi."
 publish_to: 'none' # Remove this line if you wish to publish to pub.dev
 
-version: 2.5.0+16 # add fix bug
+version: 2.5.0+17 # add fix bug
 
 
 environment:
@@ -27,8 +27,6 @@ dependencies:
   webview_flutter: ^4.14.1
   url_launcher: ^6.2.0
   audioplayers: ^6.8.1
-  puml_canvas: ^0.13.0
-
 dev_dependencies:
   flutter_test:
     sdk: flutter
