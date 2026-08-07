@@ -1,5 +1,6 @@
 import 'dart:math';
 import 'package:flutter/material.dart';
+import '../gacha_luck/roulette_ticker.dart';
 
 /// ═══════════════════════════════════════════════════════
 /// ROLLING — Undi Yes / No (Meja Rollet)
@@ -29,16 +30,22 @@ class _RollingScreenState extends State<RollingScreen>
     with SingleTickerProviderStateMixin {
   late final AnimationController _controller;
   final _rng = Random();
+  final _ticker = RouletteTicker();
 
   YesNo? _result;
   bool _spinning = false;
 
   double _baseRotation = 0;
   double _spinAngle = 0;
+  
+  /// Untuk efek getaran jarum
+  double _needleVibration = 0;
+  StreamSubscription<double>? _tickSubscription;
 
   @override
   void initState() {
     super.initState();
+    _ticker.loadAudio();
     _controller = AnimationController(vsync: this)
       ..addStatusListener((status) {
         if (status == AnimationStatus.completed) {
@@ -47,14 +54,38 @@ class _RollingScreenState extends State<RollingScreen>
           setState(() {
             _spinning = false;
             _result = _resultFromAngle(finalAngle);
+            _needleVibration = 0;
+          });
+          _tickSubscription?.cancel();
+        } else if (status == AnimationStatus.forward) {
+          // Start listening to ticks when animation starts
+          _ticker.reset();
+          _tickSubscription?.cancel();
+          _tickSubscription = _ticker.tickStream.listen((intensity) {
+            // Trigger haptic feedback jika tersedia
+            HapticFeedback.lightImpact();
           });
         }
+      })
+      ..addListener(() {
+        // Update ticker untuk deteksi paku
+        final currentTime = _controller.duration!.inMilliseconds / 1000 * _controller.value;
+        final currentAngle = _baseRotation + _controller.value * _spinAngle;
+        final angularVelocity = _controller.dx(currentTime) * _spinAngle * 1000 / _controller.duration!.inMilliseconds;
+        _ticker.update(currentAngle, angularVelocity.abs());
+        
+        // Update getaran jarum
+        setState(() {
+          _needleVibration = _ticker.getNeedleVibration(currentAngle, angularVelocity.abs());
+        });
       });
   }
 
   @override
   void dispose() {
     _controller.dispose();
+    _tickSubscription?.cancel();
+    _ticker.dispose();
     super.dispose();
   }
 
@@ -70,7 +101,9 @@ class _RollingScreenState extends State<RollingScreen>
     final sectorAngle = 360 / n;
     // Jarum statis di atas (270°). Sektor di bawah jarum:
     final normalized = ((angleDeg % 360) + 360) % 360;
-    final sectorIndex = ((normalized - 270 + sectorAngle / 2) / sectorAngle)
+    // Hitung sektor yang berada di posisi 270° (jarum di atas)
+    // Roda berputar searah jarum jam, jadi sektor yang melewati jarum adalah (270 - normalized)
+    final sectorIndex = (((270 - normalized) % 360 + 360) % 360 / sectorAngle)
             .floor() %
         n;
     return sectorIndex.isEven ? YesNo.yes : YesNo.no;
@@ -140,7 +173,7 @@ class _RollingScreenState extends State<RollingScreen>
                 child: Stack(
                   alignment: Alignment.center,
                   children: [
-                    // Roda berputar
+                    // Roda berputar dengan paku-paku
                     AnimatedBuilder(
                       animation: _controller,
                       builder: (context, child) {
@@ -151,19 +184,28 @@ class _RollingScreenState extends State<RollingScreen>
                           child: child,
                         );
                       },
-                      child: const CustomPaint(
-                        size: Size(280, 280),
-                        painter: _YesNoPainter(),
+                      child: CustomPaint(
+                        size: const Size(280, 280),
+                        painter: _YesNoPainterWithPegs(),
                       ),
                     ),
-                    // Jarum statis di atas roda
+                    // Jarum statis di atas roda (dengan efek getaran)
                     Positioned(
                       top: 2,
                       child: IgnorePointer(
-                        child: CustomPaint(
-                          size: const Size(26, 56),
-                          painter: _NeedlePainter(
-                              color: _result?.color ?? Colors.red),
+                        child: AnimatedBuilder(
+                          animation: _controller,
+                          builder: (context, child) {
+                            return Transform.rotate(
+                              angle: _needleVibration * pi / 180,
+                              child: child,
+                            );
+                          },
+                          child: CustomPaint(
+                            size: const Size(26, 56),
+                            painter: _NeedlePainter(
+                                color: _result?.color ?? Colors.red),
+                          ),
                         ),
                       ),
                     ),
@@ -325,6 +367,104 @@ class _YesNoPainter extends CustomPainter {
 
   @override
   bool shouldRepaint(covariant _YesNoPainter old) => false;
+}
+
+/// Painter roda YES/NO dengan paku-paku di sekelilingnya
+class _YesNoPainterWithPegs extends CustomPainter {
+  const _YesNoPainterWithPegs();
+
+  @override
+  void paint(Canvas canvas, Size size) {
+    final center = size.center(Offset.zero);
+    final radius = size.width / 2;
+    final rect = Rect.fromCircle(center: center, radius: radius);
+    const n = 10;
+    final sweep = 360 / n;
+
+    canvas.drawCircle(center, radius, Paint()..color = Colors.black26);
+
+    final paint = Paint()..style = PaintingStyle.fill;
+    for (var i = 0; i < n; i++) {
+      paint.color = i.isEven ? const Color(0xFF00C87A) : const Color(0xFFE74C3C);
+      canvas.drawArc(rect, i * sweep * pi / 180, sweep * pi / 180, true, paint);
+    }
+
+    // Label YES/NO di tiap sektor
+    final textPainter = TextPainter(
+      textDirection: TextDirection.ltr,
+      textAlign: TextAlign.center,
+    );
+    for (var i = 0; i < n; i++) {
+      final mid = (i * sweep + sweep / 2) * pi / 180;
+      final label = i.isEven ? 'YES' : 'NO';
+      textPainter.text = TextSpan(
+        text: label,
+        style: TextStyle(
+          color: Colors.white,
+          fontSize: 13,
+          fontWeight: FontWeight.bold,
+        ),
+      );
+      textPainter.layout();
+      final pos = center +
+          Offset(cos(mid), sin(mid)) * (radius * 0.72) -
+          Offset(textPainter.width / 2, textPainter.height / 2);
+      textPainter.paint(canvas, pos);
+    }
+
+    // Garis antar sektor
+    final line = Paint()
+      ..color = Colors.white
+      ..strokeWidth = 2;
+    for (var i = 0; i < n; i++) {
+      final angle = i * sweep * pi / 180;
+      canvas.drawLine(
+          center, center + Offset(cos(angle), sin(angle)) * radius, line);
+    }
+
+    // Paku-paku di sekeliling roda (40 paku)
+    final pegCount = 40;
+    final pegAngle = 360 / pegCount;
+    final pegRadius = radius * 0.92; // Posisi paku mendekati tepi
+    
+    for (var i = 0; i < pegCount; i++) {
+      final angle = i * pegAngle * pi / 180;
+      final pegCenter = center + Offset(cos(angle), sin(angle)) * pegRadius;
+      
+      // Gambar paku sebagai lingkaran kecil dengan efek 3D
+      final pegPaint = Paint()
+        ..shader = RadialGradient(
+          colors: [
+            const Color(0xFF8a8a8a),
+            const Color(0xFF4a4a4a),
+            const Color(0xFF2a2a2a),
+          ],
+          stops: const [0.0, 0.5, 1.0],
+        ).createShader(Rect.fromCircle(center: pegCenter, radius: 6));
+      
+      canvas.drawCircle(pegCenter, 5, pegPaint);
+      
+      // Highlight untuk efek metalik
+      final highlight = Paint()..color = Colors.white.withValues(alpha: 0.6);
+      canvas.drawCircle(
+        pegCenter + const Offset(-1.5, -1.5),
+        2,
+        highlight,
+      );
+    }
+
+    // Bingkai luar
+    canvas.drawCircle(
+        center,
+        radius,
+        Paint()
+          ..style = PaintingStyle.stroke
+          ..strokeWidth = 6
+          ..color = Colors.white);
+  }
+
+  @override
+  bool shouldRepaint(covariant _YesNoPainterWithPegs old) => false;
 }
 
 /// Jarum penunjuk statis — segitiga runcing ke bawah + pivot

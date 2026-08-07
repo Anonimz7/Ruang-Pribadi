@@ -1,5 +1,6 @@
 import 'dart:math';
 import 'package:flutter/material.dart';
+import 'roulette_ticker.dart';
 
 /// ═══════════════════════════════════════════════════════
 /// GACHA KEBERUNTUNGAN — Meja Rollet
@@ -72,6 +73,7 @@ class _GachaLuckScreenState extends State<GachaLuckScreen>
     with SingleTickerProviderStateMixin {
   late final AnimationController _controller;
   final _rng = Random();
+  final _ticker = RouletteTicker();
 
   LuckTier? _result;
   String? _message;
@@ -80,10 +82,15 @@ class _GachaLuckScreenState extends State<GachaLuckScreen>
   /// Posisi roda sebelum putaran ini + sudut putaran berjalan
   double _baseRotation = 0;
   double _spinAngle = 0;
+  
+  /// Untuk efek getaran jarum
+  double _needleVibration = 0;
+  StreamSubscription<double>? _tickSubscription;
 
   @override
   void initState() {
     super.initState();
+    _ticker.loadAudio();
     _controller = AnimationController(vsync: this)
       ..addStatusListener((status) {
         if (status == AnimationStatus.completed) {
@@ -93,25 +100,59 @@ class _GachaLuckScreenState extends State<GachaLuckScreen>
             _spinning = false;
             _result = _resultFromAngle(finalAngle);
             _message = _randomMessage(_result!);
+            _needleVibration = 0;
+          });
+          _tickSubscription?.cancel();
+        } else if (status == AnimationStatus.forward) {
+          // Start listening to ticks when animation starts
+          _ticker.reset();
+          _tickSubscription?.cancel();
+          _tickSubscription = _ticker.tickStream.listen((intensity) {
+            // Trigger haptic feedback jika tersedia
+            HapticFeedback.lightImpact();
           });
         }
+      })
+      ..addListener(() {
+        // Update ticker untuk deteksi paku
+        final currentTime = _controller.duration!.inMilliseconds / 1000 * _controller.value;
+        final currentAngle = _baseRotation + _controller.value * _spinAngle;
+        final angularVelocity = _controller.dx(currentTime) * _spinAngle * 1000 / _controller.duration!.inMilliseconds;
+        _ticker.update(currentAngle, angularVelocity.abs());
+        
+        // Update getaran jarum
+        setState(() {
+          _needleVibration = _ticker.getNeedleVibration(currentAngle, angularVelocity.abs());
+        });
       });
   }
 
   @override
   void dispose() {
     _controller.dispose();
+    _tickSubscription?.cancel();
+    _ticker.dispose();
     super.dispose();
   }
 
   /// Baca hasil dari posisi akhir roda (di mana pun ia berhenti)
+  /// Jarum statis ada di posisi jam 12 (270° dalam sistem koordinat Canvas)
+  /// Sektor 0 dimulai dari sudut 0° (jam 3) dan berputar CW
+  /// Ketika roda berputar sebesar angleDeg CW, sektor yang berada di bawah jarum
+  /// dapat dihitung dengan mencari sektor mana yang mencakup sudut 270° setelah rotasi
   LuckTier _resultFromAngle(double angleDeg) {
     final n = LuckTier.values.length;
     final sectorAngle = 360 / n;
+    // Normalisasi sudut ke [0, 360)
     final normalized = ((angleDeg % 360) + 360) % 360;
-    final sectorIndex = ((normalized - 270 + sectorAngle / 2) / sectorAngle)
-            .floor() %
-        n;
+    // Setelah roda berputar `normalized` derajat CW, 
+    // titik yang awalnya di sudut `theta` sekarang ada di `theta + normalized`
+    // Kita ingin tahu sektor mana yang sekarang berada di posisi 270° (jam 12)
+    // Sektor i mencakup sudut [i*sectorAngle, (i+1)*sectorAngle) sebelum rotasi
+    // Setelah rotasi, sektor i mencakup [(i*sectorAngle - normalized), ...)
+    // Untuk menemukan sektor di posisi 270°, kita hitung:
+    // sectorIndex = floor((270 - normalized) / sectorAngle) mod n
+    var sectorIndex = (((270 - normalized) % 360 + 360) % 360 / sectorAngle).floor() % n;
     return LuckTier.values[sectorIndex];
   }
 
@@ -196,7 +237,7 @@ class _GachaLuckScreenState extends State<GachaLuckScreen>
                 child: Stack(
                   alignment: Alignment.center,
                   children: [
-                    // Roda berputar
+                    // Roda berputar dengan paku-paku
                     AnimatedBuilder(
                       animation: _controller,
                       builder: (context, child) {
@@ -207,19 +248,28 @@ class _GachaLuckScreenState extends State<GachaLuckScreen>
                           child: child,
                         );
                       },
-                      child: const CustomPaint(
-                        size: Size(280, 280),
-                        painter: _RoulettePainter(),
+                      child: CustomPaint(
+                        size: const Size(280, 280),
+                        painter: _RoulettePainterWithPegs(),
                       ),
                     ),
-                    // Jarum statis di atas roda (tidak ikut berputar)
+                    // Jarum statis di atas roda (dengan efek getaran)
                     Positioned(
                       top: 2,
                       child: IgnorePointer(
-                        child: CustomPaint(
-                          size: const Size(26, 56),
-                          painter: _NeedlePainter(
-                              color: _result?.color ?? Colors.red),
+                        child: AnimatedBuilder(
+                          animation: Listenable.merge([_controller, StreamController<double>.fromStream(_ticker.tickStream).stream.asBroadcastStream()]),
+                          builder: (context, child) {
+                            return Transform.rotate(
+                              angle: _needleVibration * pi / 180,
+                              child: child,
+                            );
+                          },
+                          child: CustomPaint(
+                            size: const Size(26, 56),
+                            painter: _NeedlePainter(
+                                color: _result?.color ?? Colors.red),
+                          ),
                         ),
                       ),
                     ),
@@ -399,6 +449,86 @@ class _RoulettePainter extends CustomPainter {
 
   @override
   bool shouldRepaint(covariant _RoulettePainter old) => false;
+}
+
+/// Painter roda rollet dengan paku-paku di sekelilingnya
+class _RoulettePainterWithPegs extends CustomPainter {
+  const _RoulettePainterWithPegs();
+
+  @override
+  void paint(Canvas canvas, Size size) {
+    final center = size.center(Offset.zero);
+    final radius = size.width / 2;
+    final rect = Rect.fromCircle(center: center, radius: radius);
+    final n = LuckTier.values.length;
+    final sweep = 360 / n;
+
+    // Background
+    canvas.drawCircle(center, radius, Paint()..color = Colors.black26);
+
+    // Sektor
+    final paint = Paint()..style = PaintingStyle.fill;
+    for (var i = 0; i < n; i++) {
+      paint.color = LuckTier.values[i].color;
+      canvas.drawArc(rect, i * sweep * pi / 180, sweep * pi / 180, true, paint);
+    }
+
+    // Garis antar sektor
+    final line = Paint()
+      ..color = Colors.white
+      ..strokeWidth = 2;
+    for (var i = 0; i < n; i++) {
+      final angle = i * sweep * pi / 180;
+      canvas.drawLine(
+          center,
+          center + Offset(cos(angle), sin(angle)) * radius,
+          line);
+    }
+
+    // Paku-paku di sekeliling roda (40 paku)
+    final pegCount = 40;
+    final pegAngle = 360 / pegCount;
+    final pegRadius = radius * 0.92; // Posisi paku mendekati tepi
+    
+    for (var i = 0; i < pegCount; i++) {
+      final angle = i * pegAngle * pi / 180;
+      final pegCenter = center + Offset(cos(angle), sin(angle)) * pegRadius;
+      
+      // Gambar paku sebagai lingkaran kecil dengan efek 3D
+      final pegPaint = Paint()
+        ..shader = RadialGradient(
+          colors: [
+            const Color(0xFF8a8a8a),
+            const Color(0xFF4a4a4a),
+            const Color(0xFF2a2a2a),
+          ],
+          stops: const [0.0, 0.5, 1.0],
+        ).createShader(Rect.fromCircle(center: pegCenter, radius: 6));
+      
+      canvas.drawCircle(pegCenter, 5, pegPaint);
+      
+      // Highlight untuk efek metalik
+      final highlight = Paint()..color = Colors.white.withValues(alpha: 0.6);
+      canvas.drawCircle(
+        pegCenter + const Offset(-1.5, -1.5),
+        2,
+        highlight,
+      );
+    }
+
+    // Bingkai luar
+    canvas.drawCircle(
+        center,
+        radius,
+        Paint()
+          ..style = PaintingStyle.stroke
+          ..strokeWidth = 6
+          ..color = Colors.white);
+
+  }
+
+  @override
+  bool shouldRepaint(covariant _RoulettePainterWithPegs old) => false;
 }
 
 /// Jarum penunjuk statis — segitiga runcing ke bawah + pivot

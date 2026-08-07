@@ -39,6 +39,8 @@ flutter:
   # Windows struktur database
   assets:
     - assets\database\data.db
+    - assets\sounds\tick.wav
+    - assets\images\peg.svg
 
   fonts:
     - family: Roboto
