@@ -1,5 +1,7 @@
+import 'dart:async';
 import 'dart:math';
 import 'package:flutter/material.dart';
+import 'package:flutter/services.dart';
 import 'roulette_ticker.dart';
 
 /// ═══════════════════════════════════════════════════════
@@ -83,14 +85,25 @@ class _GachaLuckScreenState extends State<GachaLuckScreen>
   double _baseRotation = 0;
   double _spinAngle = 0;
   
-  /// Untuk efek getaran jarum
-  double _needleVibration = 0;
+  // Simulasi fisika jarum: sudut (rad) & kecepatan sudut (rad/s).
+  // Roda berputar searah jarum jam (kanan). Di Flutter rotasi positif = CW,
+  // sehingga ujung jarum (di bawah pivot) bergerak ke KIRI saat sudut positif.
+  // Karena paku mendorong jarum ke KANAN, impulsnya dibuat negatif.
+  static const double _kStiffness = 120; // rad/s² per rad
+  static const double _kDamping = 8; // per detik
+  static const double _kMinKick = 2.2; // rad/s — dorongan dasar tiap hantaman
+  static const double _kSpeedKick = 0.35; // rad/s tambahan dari kecepatan putar
+  static const double _kMaxAmplitude = 0.6; // rad (~34°)
+  double _needleAngle = 0;
+  double _needleOmega = 0;
+  Duration _lastElapsed = Duration.zero;
   StreamSubscription<double>? _tickSubscription;
 
   @override
   void initState() {
     super.initState();
     _ticker.loadAudio();
+    _ticker.pegCount = LuckTier.values.length; // 1 paku per garis batas sektor
     _controller = AnimationController(vsync: this)
       ..addStatusListener((status) {
         if (status == AnimationStatus.completed) {
@@ -100,7 +113,8 @@ class _GachaLuckScreenState extends State<GachaLuckScreen>
             _spinning = false;
             _result = _resultFromAngle(finalAngle);
             _message = _randomMessage(_result!);
-            _needleVibration = 0;
+            _needleAngle = 0;
+            _needleOmega = 0;
           });
           _tickSubscription?.cancel();
         } else if (status == AnimationStatus.forward) {
@@ -108,6 +122,9 @@ class _GachaLuckScreenState extends State<GachaLuckScreen>
           _ticker.reset();
           _tickSubscription?.cancel();
           _tickSubscription = _ticker.tickStream.listen((intensity) {
+            // Dorongan paku: ada nilai dasar + tonjolan dari kecepatan,
+            // supaya defleksi tetap terlihat walau roda sudah melambat.
+            _needleOmega -= (_kMinKick + intensity * _kSpeedKick);
             // Trigger haptic feedback jika tersedia
             HapticFeedback.lightImpact();
           });
@@ -115,14 +132,22 @@ class _GachaLuckScreenState extends State<GachaLuckScreen>
       })
       ..addListener(() {
         // Update ticker untuk deteksi paku
-        final currentTime = _controller.duration!.inMilliseconds / 1000 * _controller.value;
         final currentAngle = _baseRotation + _controller.value * _spinAngle;
-        final angularVelocity = _controller.dx(currentTime) * _spinAngle * 1000 / _controller.duration!.inMilliseconds;
+        final angularVelocity = _controller.velocity * _spinAngle;
         _ticker.update(currentAngle, angularVelocity.abs());
         
-        // Update getaran jarum
+        // Integrasi osilator pegas teredam dengan delta waktu nyata
+        // (dt tetap 1/60 di layar refresh tinggi membuat fisik 2x lebih cepat)
+        final now = _controller.lastElapsedDuration ?? Duration.zero;
+        final dt = (now - _lastElapsed).inMicroseconds / 1e6;
+        _lastElapsed = now;
+        if (dt <= 0 || dt > 0.1) return; // lewati lompatan waktu (restart)
+
+        final accel = -_kStiffness * _needleAngle - _kDamping * _needleOmega;
         setState(() {
-          _needleVibration = _ticker.getNeedleVibration(currentAngle, angularVelocity.abs());
+          _needleOmega += accel * dt;
+          _needleAngle = (_needleAngle + _needleOmega * dt)
+              .clamp(-_kMaxAmplitude, _kMaxAmplitude);
         });
       });
   }
@@ -131,7 +156,8 @@ class _GachaLuckScreenState extends State<GachaLuckScreen>
   void dispose() {
     _controller.dispose();
     _tickSubscription?.cancel();
-    _ticker.dispose();
+    // NOTE: ticker adalah singleton bersama — jangan di-dispose di sini,
+    // karena akan mematikan player audio & stream tick untuk semua screen.
     super.dispose();
   }
 
@@ -207,6 +233,10 @@ class _GachaLuckScreenState extends State<GachaLuckScreen>
       _message = null;
       _baseRotation = _baseRotation + _spinAngle;
       _spinAngle = totalAngle;
+      // Reset sisa ayunan dari putaran sebelumnya
+      _needleAngle = 0;
+      _needleOmega = 0;
+      _lastElapsed = Duration.zero;
     });
 
     _controller.value = 0;
@@ -258,10 +288,12 @@ class _GachaLuckScreenState extends State<GachaLuckScreen>
                       top: 2,
                       child: IgnorePointer(
                         child: AnimatedBuilder(
-                          animation: Listenable.merge([_controller, StreamController<double>.fromStream(_ticker.tickStream).stream.asBroadcastStream()]),
+                          animation: _controller,
                           builder: (context, child) {
                             return Transform.rotate(
-                              angle: _needleVibration * pi / 180,
+                              angle: _needleAngle,
+                              // Pivot di atas (titik tumpu), ujung runcing yang berayun
+                              alignment: Alignment.topCenter,
                               child: child,
                             );
                           },
@@ -402,55 +434,6 @@ class _ResultCard extends StatelessWidget {
   }
 }
 
-/// Painter roda rollet — hanya sektor (roda diputar lewat Transform.rotate)
-class _RoulettePainter extends CustomPainter {
-  const _RoulettePainter();
-
-  @override
-  void paint(Canvas canvas, Size size) {
-    final center = size.center(Offset.zero);
-    final radius = size.width / 2;
-    final rect = Rect.fromCircle(center: center, radius: radius);
-    final n = LuckTier.values.length;
-    final sweep = 360 / n;
-
-    // Background
-    canvas.drawCircle(center, radius, Paint()..color = Colors.black26);
-
-    // Sektor
-    final paint = Paint()..style = PaintingStyle.fill;
-    for (var i = 0; i < n; i++) {
-      paint.color = LuckTier.values[i].color;
-      canvas.drawArc(rect, i * sweep * pi / 180, sweep * pi / 180, true, paint);
-    }
-
-    // Garis antar sektor
-    final line = Paint()
-      ..color = Colors.white
-      ..strokeWidth = 2;
-    for (var i = 0; i < n; i++) {
-      final angle = i * sweep * pi / 180;
-      canvas.drawLine(
-          center,
-          center + Offset(cos(angle), sin(angle)) * radius,
-          line);
-    }
-
-    // Bingkai luar
-    canvas.drawCircle(
-        center,
-        radius,
-        Paint()
-          ..style = PaintingStyle.stroke
-          ..strokeWidth = 6
-          ..color = Colors.white);
-
-  }
-
-  @override
-  bool shouldRepaint(covariant _RoulettePainter old) => false;
-}
-
 /// Painter roda rollet dengan paku-paku di sekelilingnya
 class _RoulettePainterWithPegs extends CustomPainter {
   const _RoulettePainterWithPegs();
@@ -485,10 +468,11 @@ class _RoulettePainterWithPegs extends CustomPainter {
           line);
     }
 
-    // Paku-paku di sekeliling roda (40 paku)
-    final pegCount = 40;
+    // Paku di garis batas sektor (1 paku per garis), agak ke tengah:
+    // 0.78 radius ≈ 70% panjang jarum dari pivot atas, selaras dgn jarum
+    final pegCount = n;
     final pegAngle = 360 / pegCount;
-    final pegRadius = radius * 0.92; // Posisi paku mendekati tepi
+    final pegRadius = radius * 0.78;
     
     for (var i = 0; i < pegCount; i++) {
       final angle = i * pegAngle * pi / 180;
