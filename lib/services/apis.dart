@@ -675,6 +675,60 @@ class VideoApi {
   }
 }
 
+// ─── Bahasa (Kamus Pasangan Kata) ───────────────────────────────────────────
+
+class BahasaApi {
+  final _c = ApiClient();
+
+  /// [GET /bahasa/pairs] — Pasangan bahasa unik + jumlah dokumen
+  Future<List<dynamic>> pairs() async {
+    final r = await _c.get('/bahasa/pairs');
+    return r is List ? r : [];
+  }
+
+  /// [GET /bahasa?lang=...] — Daftar dokumen (kosong = semua bahasa)
+  Future<List<dynamic>> list({String lang = '', int limit = 200}) async {
+    final r = await _c.get('/bahasa', {
+      if (lang.isNotEmpty) 'lang': lang,
+      'limit': '$limit',
+    });
+    return r is List ? r : [];
+  }
+
+  /// [GET /bahasa/{id}] — Detail dokumen + list entri {a, b}
+  Future<Map<String, dynamic>> get(int id) async =>
+      (await _c.get('/bahasa/$id')) as Map<String, dynamic>;
+
+  /// [POST /bahasa] — Buat dokumen (admin)
+  Future<Map<String, dynamic>> create({
+    required String stringLang,
+    required String judul,
+    required String langSource,
+  }) async =>
+      (await _c.post('/bahasa', {
+        'string_lang': stringLang,
+        'judul': judul,
+        'lang_source': langSource,
+      })) as Map<String, dynamic>;
+
+  /// [PUT /bahasa/{id}] — Update dokumen (admin)
+  Future<Map<String, dynamic>> update({
+    required int id,
+    required String stringLang,
+    required String judul,
+    required String langSource,
+  }) async =>
+      (await _c.put('/bahasa/$id', {
+        'string_lang': stringLang,
+        'judul': judul,
+        'lang_source': langSource,
+      })) as Map<String, dynamic>;
+
+  /// [DELETE /bahasa/{id}] — Hapus dokumen (admin)
+  Future<Map<String, dynamic>> delete(int id) async =>
+      (await _c.delete('/bahasa/$id')) as Map<String, dynamic>;
+}
+
 // ─── WebSocket ───────────────────────────────────────────────────────────────
 
 class WebSocketService {

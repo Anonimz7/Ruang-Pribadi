@@ -341,6 +341,7 @@ class _AdminUserDetailScreenState extends State<AdminUserDetailScreen> {
   List<Widget> _buildMenuSections() {
     return [
       _buildMenuSection('FITUR LOKAL', [
+        'bahasa',
         'bahasa_jepang',
         'math_speed',
         'password_generator',
@@ -456,6 +457,7 @@ class _AdminUserDetailScreenState extends State<AdminUserDetailScreen> {
 
   String _label(String key) {
     const map = {
+      'bahasa': '🌐 Bahasa',
       'bahasa_jepang': '🇯🇵 Bahasa Jepang',
       'math_speed': '🧮 Math Speed',
       'password_generator': '🔑 Password Gen',
@@ -479,6 +481,7 @@ class _AdminUserDetailScreenState extends State<AdminUserDetailScreen> {
 
   Color _color(String key) {
     const map = {
+      'bahasa': Colors.lightBlue,
       'bahasa_jepang': Colors.red,
       'math_speed': Colors.orange,
       'password_generator': Colors.teal,

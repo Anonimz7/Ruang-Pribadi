@@ -474,7 +474,8 @@ class _AdminPermScreenState extends State<AdminPermScreen> {
                               'password_generator',
                               'gacha_luck',
                               'rolling',
-                              'code_diagram'
+                              'code_diagram',
+                              'bahasa'
                             ].contains(a))
                         .map((app) => _defaultChip(app))
                         .toList(),
@@ -594,6 +595,7 @@ class _AdminPermScreenState extends State<AdminPermScreen> {
 
   String _label(String key) {
     const map = {
+      'bahasa': '🌐 Bahasa',
       'bahasa_jepang': '🇯🇵 Bahasa Jepang',
       'math_speed': '🧮 Math Speed',
       'password_generator': '🔑 Password Gen',
@@ -617,6 +619,7 @@ class _AdminPermScreenState extends State<AdminPermScreen> {
 
   Color _color(String key) {
     const map = {
+      'bahasa': Colors.lightBlue,
       'bahasa_jepang': Colors.red,
       'math_speed': Colors.orange,
       'password_generator': Colors.teal,
