@@ -96,65 +96,74 @@ class _BahasaFormScreenState extends State<BahasaFormScreen> {
 
   void _showPanduan() {
     const panduan = '''
-Panduan Format lang_source
-Terjemahkan teks Inggris ke Indonesia dalam JSON array berisi objek {"a": "teks sumber", "b": "terjemahan"}.
+Buatlah terjemahan teks Inggris ke Indonesia dalam format JSON array dengan objek {"a": "teks sumber", "b": "terjemahan"}.
 
-1. Format
-Contoh yang benar:
-  {"a": "Higher energy prices", "b": "Kenaikan harga energi"}
-  - "a" = teks sumber (bahasa Inggris).
-  - "b" = terjemahan (bahasa Indonesia).
+Aturan wajib yang harus diikuti:
 
-2. Aturan penggabungan kata/frasa
-Jika kata sifat (mis. "Higher") dan kata benda (mis. "energy prices") membentuk SATU
-konsep/frasa benda utuh, GABUNGKAN menjadi satu entri "a".
-  - "Higher energy prices" → SATU entri (bukan "Higher" + "energy prices" terpisah)
-  - "Higher interest rates" → SATU entri
-  - Noun phrase lain: "central banks", "overall demand", "inflationary pressures"
-    juga satu entri karena satu kesatuan makna.
+1. Format:
+   - Contoh yang benar: {"a": "Higher energy prices", "b": "Kenaikan harga energi"}
+   - "a" adalah teks sumber (Inggris).
+   - "b" adalah terjemahan (Indonesia).
 
-3. Aturan pemisahan
-Kata kerja, kata keterangan, kata sambung, kata depan → pisahkan per kata:
-  directly, cause, on, and, by, which...
-Infinitif → tetap digabung: "to rise", "to increase", "to control".
+2. Aturan penggabungan kata/frasa:
+   - Jika kata sifat (seperti "Higher") dan kata benda (seperti "energy prices") membentuk SATU konsep/frasa benda utuh yang menjadi subjek atau objek utama dalam kalimat, maka GABUNGKAN menjadi satu entri "a".
+   - Contoh wajib:
+     - "Higher energy prices" → SATU entri (bukan "Higher" dan "energy prices" terpisah)
+     - "Higher interest rates" → SATU entri (bukan "Higher" dan "interest rates" terpisah)
+   - Untuk frasa benda tetap lainnya seperti "central banks", "overall demand", "inflationary pressures" juga digabung menjadi satu entri karena merupakan satu kesatuan makna.
 
-4. Kata kerja bantu (am, is, are)
-Tidak diterjemahkan terpisah; ikat dengan subjek:
-  {"a": "I am", "b": "saya"}
+3. Aturan pemisahan:
+   - Kata kerja, kata keterangan, kata sambung, dan kata depan dipisahkan per kata (misal: "directly", "cause", "on", "and", "by", "which").
+   - Frasa "to rise", "to increase", "to control" → tetap digabung karena satu kesatuan makna (infinitif).
+
+4. Kata kerja bantu (am, is, are):
+   - Tidak diterjemahkan terpisah. Contoh: "I am" → {"a": "I am", "b": "saya"}.
+
+5. Urutan array harus mengikuti urutan kemunculan kata/frasa dalam teks sumber secara persis.
+
+6. Array tidak boleh kosong.
+
+Teks sumber yang diterjemahkan:
+"Higher energy prices directly cause inflation to rise. This creates pressure on central banks to increase interest rates to control inflation. Higher interest rates can influence energy prices and inflation by reducing overall demand in the economy, which can help contain inflationary pressures."
 ''';
     showDialog(
       context: context,
       builder: (ctx) => AlertDialog(
-        title: const Text('Panduan Format lang_source'),
+        title: const Text('Panduan Format'),
         content: SizedBox(
           width: double.maxFinite,
-          child: Column(
-            mainAxisSize: MainAxisSize.min,
-            crossAxisAlignment: CrossAxisAlignment.stretch,
-            children: [
-              SelectableText(
-                panduan,
-                style: const TextStyle(
-                    fontFamily: 'monospace', fontSize: 12),
-              ),
-              const SizedBox(height: 8),
-              Align(
-                alignment: Alignment.centerRight,
-                child: TextButton.icon(
-                  icon: const Icon(Icons.copy, size: 16),
-                  label: const Text('Salin'),
-                  onPressed: () {
-                    Clipboard.setData(
-                        const ClipboardData(text: panduan));
-                    ScaffoldMessenger.of(ctx).showSnackBar(
-                      const SnackBar(content: Text('Panduan disalin')),
-                    );
-                  },
+          height: MediaQuery.sizeOf(context).height * 0.8,
+          child: Scrollbar(
+            child: SingleChildScrollView(
+              child: Column(
+              mainAxisSize: MainAxisSize.min,
+              crossAxisAlignment: CrossAxisAlignment.stretch,
+              children: [
+                SelectableText(
+                  panduan,
+                  style: const TextStyle(
+                      fontFamily: 'monospace', fontSize: 12),
                 ),
-              ),
-            ],
+                const SizedBox(height: 8),
+                Align(
+                  alignment: Alignment.centerRight,
+                  child: TextButton.icon(
+                    icon: const Icon(Icons.copy, size: 16),
+                    label: const Text('Salin'),
+                    onPressed: () {
+                      Clipboard.setData(
+                          const ClipboardData(text: panduan));
+                      ScaffoldMessenger.of(ctx).showSnackBar(
+                        const SnackBar(content: Text('Panduan disalin')),
+                      );
+                    },
+                  ),
+                ),
+              ],
+            ),
           ),
         ),
+      ),
         actions: [
           TextButton(
             onPressed: () => Navigator.pop(ctx),
