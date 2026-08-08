@@ -529,16 +529,6 @@ class _StocksScreenState extends State<StocksScreen> {
             ),
             const SizedBox(height: 28),
           ],
-          _chartPanel(
-            title: 'Arus Dana Asing',
-            subtitle: 'Net foreign buy / sell',
-            legend: const [
-              _ChartLegendItem('Beli bersih', Color(0xFF00A86B)),
-              _ChartLegendItem('Jual bersih', Color(0xFFD94B4B)),
-            ],
-            height: 210,
-            child: _foreignChart(rawData),
-          ),
           const SizedBox(height: 28),
           _chartPanel(
             title: 'Total Nilai Transaksi',
@@ -551,14 +541,23 @@ class _StocksScreenState extends State<StocksScreen> {
           ),
           const SizedBox(height: 28),
           _chartPanel(
-            title: 'ATV (Avg Transaction Value)',
-            subtitle:
-                'Ukuran transaksi rata-rata — indikator aktivitas institusional',
+            title: 'Volume Perdagangan',
+            subtitle: 'Jumlah lot yang diperdagangkan',
             legend: const [
-              _ChartLegendItem('ATV', Color(0xFF9270CA)),
+              _ChartLegendItem('Volume', Color(0xFF6DC8EC)),
             ],
             height: 200,
-            child: _atvChart(rawData),
+            child: _volumeChart(rawData),
+          ),
+          _chartPanel(
+            title: 'Arus Dana Asing',
+            subtitle: 'Net foreign buy / sell',
+            legend: const [
+              _ChartLegendItem('Beli bersih', Color(0xFF00A86B)),
+              _ChartLegendItem('Jual bersih', Color(0xFFD94B4B)),
+            ],
+            height: 210,
+            child: _foreignChart(rawData),
           ),
           const SizedBox(height: 28),
           _chartPanel(
@@ -569,6 +568,17 @@ class _StocksScreenState extends State<StocksScreen> {
             ],
             height: 210,
             child: _biiScoreChart(rawData),
+          ),
+          const SizedBox(height: 28),
+          _chartPanel(
+            title: 'ATV (Avg Transaction Value)',
+            subtitle:
+                'Ukuran transaksi rata-rata — indikator aktivitas institusional',
+            legend: const [
+              _ChartLegendItem('ATV', Color(0xFF9270CA)),
+            ],
+            height: 200,
+            child: _atvChart(rawData),
           ),
           const SizedBox(height: 28),
           _chartPanel(
@@ -589,16 +599,6 @@ class _StocksScreenState extends State<StocksScreen> {
             ],
             height: 180,
             child: _negoFreqChart(rawData),
-          ),
-          const SizedBox(height: 28),
-          _chartPanel(
-            title: 'Volume Perdagangan',
-            subtitle: 'Jumlah lot yang diperdagangkan',
-            legend: const [
-              _ChartLegendItem('Volume', Color(0xFF6DC8EC)),
-            ],
-            height: 200,
-            child: _volumeChart(rawData),
           ),
           const SizedBox(height: 28),
           // ── Data Summary Table ──
