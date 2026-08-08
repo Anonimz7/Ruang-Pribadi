@@ -63,10 +63,18 @@ class _BahasaListScreenState extends State<BahasaListScreen> {
   }
 
   Future<void> _edit(Map<String, dynamic> d) async {
+    Map<String, dynamic> dokumen;
+    try {
+      // item list tidak bawa `entries` → ambil detail penuh biar form tidak kosong
+      dokumen = await _api.get(d['id'] as int);
+    } catch (_) {
+      dokumen = d;
+    }
+    if (!mounted) return;
     final doc = await Navigator.push(
       context,
       MaterialPageRoute(
-        builder: (_) => BahasaFormScreen(dokumen: d),
+        builder: (_) => BahasaFormScreen(dokumen: dokumen),
       ),
     );
     if (doc != null) _load();

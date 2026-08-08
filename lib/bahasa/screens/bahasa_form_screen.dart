@@ -1,5 +1,6 @@
 import 'dart:convert';
 import 'package:flutter/material.dart';
+import 'package:flutter/services.dart';
 import '../../services/apis.dart';
 
 /// Form admin: buat/ubah dokumen kamus bahasa.
@@ -94,33 +95,62 @@ class _BahasaFormScreenState extends State<BahasaFormScreen> {
   }
 
   void _showPanduan() {
+    const panduan = '''
+Panduan Format lang_source
+Terjemahkan teks Inggris ke Indonesia dalam JSON array berisi objek {"a": "teks sumber", "b": "terjemahan"}.
+
+1. Format
+Contoh yang benar:
+  {"a": "Higher energy prices", "b": "Kenaikan harga energi"}
+  - "a" = teks sumber (bahasa Inggris).
+  - "b" = terjemahan (bahasa Indonesia).
+
+2. Aturan penggabungan kata/frasa
+Jika kata sifat (mis. "Higher") dan kata benda (mis. "energy prices") membentuk SATU
+konsep/frasa benda utuh, GABUNGKAN menjadi satu entri "a".
+  - "Higher energy prices" → SATU entri (bukan "Higher" + "energy prices" terpisah)
+  - "Higher interest rates" → SATU entri
+  - Noun phrase lain: "central banks", "overall demand", "inflationary pressures"
+    juga satu entri karena satu kesatuan makna.
+
+3. Aturan pemisahan
+Kata kerja, kata keterangan, kata sambung, kata depan → pisahkan per kata:
+  directly, cause, on, and, by, which...
+Infinitif → tetap digabung: "to rise", "to increase", "to control".
+
+4. Kata kerja bantu (am, is, are)
+Tidak diterjemahkan terpisah; ikat dengan subjek:
+  {"a": "I am", "b": "saya"}
+''';
     showDialog(
       context: context,
       builder: (ctx) => AlertDialog(
         title: const Text('Panduan Format lang_source'),
-        content: const SingleChildScrollView(
+        content: SizedBox(
+          width: double.maxFinite,
           child: Column(
-            crossAxisAlignment: CrossAxisAlignment.start,
             mainAxisSize: MainAxisSize.min,
+            crossAxisAlignment: CrossAxisAlignment.stretch,
             children: [
-              Text('Isi berupa JSON array. Setiap entri:'),
-              SizedBox(height: 8),
-              Text(
-                '[{"a": "Higher", "b": "lebih tinggi"},\n'
-                ' {"a": "energy prices", "b": "harga energi"}]',
-                style: TextStyle(
-                    fontFamily: 'monospace',
-                    fontSize: 12,
-                    color: Color(0xFF00C87A)),
+              SelectableText(
+                panduan,
+                style: const TextStyle(
+                    fontFamily: 'monospace', fontSize: 12),
               ),
-              SizedBox(height: 12),
-              Text(
-                '• a  = kata/teks sumber\n'
-                '• b  = terjemahan\n'
-                '• Arah a→b mengikuti pasangan yang dipilih\n'
-                '  (inggris-indonesia: a=Inggris, b=Indonesia)\n'
-                '• Array tidak boleh kosong',
-                style: TextStyle(fontSize: 13),
+              const SizedBox(height: 8),
+              Align(
+                alignment: Alignment.centerRight,
+                child: TextButton.icon(
+                  icon: const Icon(Icons.copy, size: 16),
+                  label: const Text('Salin'),
+                  onPressed: () {
+                    Clipboard.setData(
+                        const ClipboardData(text: panduan));
+                    ScaffoldMessenger.of(ctx).showSnackBar(
+                      const SnackBar(content: Text('Panduan disalin')),
+                    );
+                  },
+                ),
               ),
             ],
           ),
